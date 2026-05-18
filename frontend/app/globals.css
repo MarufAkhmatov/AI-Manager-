@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: #000;
+  color: #fff;
+  min-height: 100%;
+}
+
+body {
+  font-family: ui-sans-serif, system-ui, "Inter", Helvetica, sans-serif;
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(124, 231, 255, 0.06), transparent 60%),
+    radial-gradient(900px 500px at -10% 90%, rgba(124, 231, 255, 0.04), transparent 60%),
+    #000;
+}
+
+.glass {
+  background: rgba(20, 20, 20, 0.55);
+  backdrop-filter: blur(18px) saturate(120%);
+  -webkit-backdrop-filter: blur(18px) saturate(120%);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 20px;
+}
+
+.neo {
+  background: linear-gradient(180deg, #131313 0%, #0c0c0c 100%);
+  border-radius: 20px;
+  box-shadow:
+    8px 8px 24px rgba(0, 0, 0, 0.7),
+    -2px -2px 8px rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.neo-in {
+  background: #0a0a0a;
+  border-radius: 16px;
+  box-shadow:
+    inset 4px 4px 12px rgba(0, 0, 0, 0.8),
+    inset -2px -2px 8px rgba(255, 255, 255, 0.03);
+}
+
+.accent-pulse {
+  box-shadow:
+    0 0 0 1px rgba(124, 231, 255, 0.5),
+    0 0 24px rgba(124, 231, 255, 0.35);
+}
+
+/* React Flow dark overrides */
+.react-flow__node {
+  font-family: inherit;
+}
+.react-flow__edge-path {
+  stroke: rgba(255, 255, 255, 0.4);
+}
+.react-flow__edge.active .react-flow__edge-path {
+  stroke: #7ce7ff;
+}
