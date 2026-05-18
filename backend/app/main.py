@@ -8,7 +8,7 @@ from fastapi import FastAPI
 
 from app.agents.architect import architect
 from app.agents.regulyator import regulyator
-from app.api import routes_chat, ws_hub
+from app.api import routes_agents, routes_auth, routes_chat, routes_kb, ws_hub
 
 
 @asynccontextmanager
@@ -30,5 +30,8 @@ async def healthz() -> dict[str, str]:
     return {"status": "ok"}
 
 
+app.include_router(routes_auth.router)
 app.include_router(routes_chat.router)
+app.include_router(routes_kb.router)
+app.include_router(routes_agents.router)
 app.include_router(ws_hub.router)

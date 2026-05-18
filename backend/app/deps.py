@@ -1,10 +1,4 @@
-"""FastAPI dependencies.
-
-The real JWT-backed `current_user` ships in Phase 5. For Phase 3 a
-permissive dev shim reads an optional `X-Dev-Role` header so the
-chat path is exercisable end-to-end. The `require_role` helper is
-already in its final shape — Phase 5 only swaps the user resolver.
-"""
+"""FastAPI dependencies for auth + RBAC."""
 
 from __future__ import annotations
 
@@ -12,6 +6,8 @@ import uuid
 from dataclasses import dataclass
 
 from fastapi import Depends, Header, HTTPException, status
+
+from app.security.jwt import decode_token
 
 
 @dataclass(slots=True)
@@ -21,11 +17,23 @@ class AuthUser:
     role: str  # 'admin' | 'analyst' | 'viewer'
 
 
-async def current_user(x_dev_role: str | None = Header(default=None)) -> AuthUser:
-    role = (x_dev_role or "analyst").lower()
+async def current_user(authorization: str | None = Header(default=None)) -> AuthUser:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="missing bearer token")
+    token = authorization.split(" ", 1)[1].strip()
+    try:
+        payload = decode_token(token)
+    except Exception as e:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="invalid token") from e
+
+    role = payload.get("role", "viewer")
     if role not in {"admin", "analyst", "viewer"}:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="unknown role")
-    return AuthUser(id=None, username="dev", role=role)
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="unknown role")
+    return AuthUser(
+        id=uuid.UUID(payload["sub"]) if payload.get("sub") else None,
+        username=payload.get("username", ""),
+        role=role,
+    )
 
 
 def require_role(*allowed: str):
