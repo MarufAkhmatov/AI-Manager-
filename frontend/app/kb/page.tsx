@@ -57,7 +57,7 @@ export default function KbPage() {
   return (
     <main className="min-h-screen p-8">
       <header className="mb-8 flex items-center justify-between">
-        <Link href="/dashboard" className="text-sm text-bone-200 hover:text-accent">
+        <Link href="/dashboard" className="text-sm text-text-dim hover:text-accent">
           ← Dashboard
         </Link>
         <Button variant="ghost" onClick={reindex} disabled={busy}>
@@ -68,12 +68,12 @@ export default function KbPage() {
       {stats && (
         <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-4">
           <NeoCard>
-            <div className="text-xs uppercase tracking-wider text-bone-300">Total</div>
+            <div className="text-xs uppercase tracking-wider text-text-dim">Total</div>
             <div className="mt-2 text-3xl font-semibold">{stats.total}</div>
           </NeoCard>
           {Object.entries(stats.by_category).map(([k, v]) => (
             <NeoCard key={k}>
-              <div className="text-xs uppercase tracking-wider text-bone-300">{k}</div>
+              <div className="text-xs uppercase tracking-wider text-text-dim">{k}</div>
               <div className="mt-2 text-3xl font-semibold">{v}</div>
             </NeoCard>
           ))}
@@ -84,7 +84,7 @@ export default function KbPage() {
 
       <NeoCard className="overflow-x-auto">
         <table className="w-full text-left text-sm">
-          <thead className="text-xs uppercase tracking-wider text-bone-300">
+          <thead className="text-xs uppercase tracking-wider text-text-dim">
             <tr>
               <th className="pb-3">Title</th>
               <th className="pb-3">Category</th>
@@ -105,7 +105,7 @@ export default function KbPage() {
                     className={
                       d.is_confidential
                         ? "rounded-full bg-white/5 px-2 py-0.5 text-xs text-accent"
-                        : "rounded-full bg-white/5 px-2 py-0.5 text-xs text-bone-200"
+                        : "rounded-full bg-white/5 px-2 py-0.5 text-xs text-text-dim"
                     }
                   >
                     {d.is_confidential ? "lotus" : d.status}

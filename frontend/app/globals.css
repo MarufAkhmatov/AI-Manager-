@@ -2,63 +2,133 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+/* ---------- Theme tokens ---------- */
+/* Dark is the default. The .light class on <html> swaps the palette. */
+:root,
+.dark {
+  --bg: #07120c;
+  --surface: rgba(20, 28, 23, 0.62);
+  --surface-2: #0b1812;
+  --line: rgba(255, 255, 255, 0.06);
+  --text: #f3fff8;
+  --text-dim: #9bb2a4;
+
+  --shadow-neo:
+    8px 8px 24px rgba(0, 0, 0, 0.65),
+    -2px -2px 8px rgba(255, 255, 255, 0.04);
+  --shadow-neo-in:
+    inset 4px 4px 12px rgba(0, 0, 0, 0.75),
+    inset -2px -2px 8px rgba(255, 255, 255, 0.03);
+
   color-scheme: dark;
+}
+
+.light {
+  --bg: #f1f7f3;
+  --surface: rgba(255, 255, 255, 0.66);
+  --surface-2: #ffffff;
+  --line: rgba(0, 0, 0, 0.08);
+  --text: #0f1a14;
+  --text-dim: #4a5a52;
+
+  --shadow-neo:
+    8px 8px 24px rgba(15, 26, 20, 0.12),
+    -2px -2px 8px rgba(255, 255, 255, 0.9);
+  --shadow-neo-in:
+    inset 4px 4px 10px rgba(15, 26, 20, 0.08),
+    inset -2px -2px 8px rgba(255, 255, 255, 0.9);
+
+  color-scheme: light;
 }
 
 html,
 body {
-  background: #000;
-  color: #fff;
+  background: var(--bg);
+  color: var(--text);
   min-height: 100%;
 }
 
 body {
   font-family: ui-sans-serif, system-ui, "Inter", Helvetica, sans-serif;
+  /* Soft green radial accents — same hue in both themes, different opacity. */
   background:
-    radial-gradient(1200px 600px at 80% -10%, rgba(124, 231, 255, 0.06), transparent 60%),
-    radial-gradient(900px 500px at -10% 90%, rgba(124, 231, 255, 0.04), transparent 60%),
-    #000;
+    radial-gradient(1200px 600px at 80% -10%, rgba(34, 213, 143, 0.10), transparent 60%),
+    radial-gradient(900px 500px at -10% 90%, rgba(34, 213, 143, 0.07), transparent 60%),
+    var(--bg);
 }
 
+/* ---------- Reusable surfaces ---------- */
+
 .glass {
-  background: rgba(20, 20, 20, 0.55);
+  background: var(--surface);
   backdrop-filter: blur(18px) saturate(120%);
   -webkit-backdrop-filter: blur(18px) saturate(120%);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line);
   border-radius: 20px;
 }
 
 .neo {
-  background: linear-gradient(180deg, #131313 0%, #0c0c0c 100%);
+  background: var(--surface-2);
   border-radius: 20px;
-  box-shadow:
-    8px 8px 24px rgba(0, 0, 0, 0.7),
-    -2px -2px 8px rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: var(--shadow-neo);
+  border: 1px solid var(--line);
 }
 
 .neo-in {
-  background: #0a0a0a;
+  background: var(--surface-2);
   border-radius: 16px;
-  box-shadow:
-    inset 4px 4px 12px rgba(0, 0, 0, 0.8),
-    inset -2px -2px 8px rgba(255, 255, 255, 0.03);
+  box-shadow: var(--shadow-neo-in);
 }
 
 .accent-pulse {
   box-shadow:
-    0 0 0 1px rgba(124, 231, 255, 0.5),
-    0 0 24px rgba(124, 231, 255, 0.35);
+    0 0 0 1px rgba(34, 213, 143, 0.55),
+    0 0 24px rgba(34, 213, 143, 0.35);
 }
 
-/* React Flow dark overrides */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 999px;
+}
+
+/* ---------- React Flow theme overrides ---------- */
+
 .react-flow__node {
   font-family: inherit;
+  background: transparent;
+  border: none;
+  padding: 0;
+  width: auto;
 }
 .react-flow__edge-path {
-  stroke: rgba(255, 255, 255, 0.4);
+  stroke: var(--text-dim);
+  stroke-width: 1.4;
+  opacity: 0.55;
 }
-.react-flow__edge.active .react-flow__edge-path {
-  stroke: #7ce7ff;
+.react-flow__edge.active .react-flow__edge-path,
+.react-flow__edge.animated .react-flow__edge-path {
+  stroke: #22d58f;
+  opacity: 0.95;
+}
+.react-flow__controls {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.react-flow__controls-button {
+  background: var(--surface-2);
+  color: var(--text);
+  border-bottom: 1px solid var(--line);
+}
+.react-flow__controls-button:hover {
+  background: var(--surface);
+  color: #22d58f;
+}
+.react-flow__attribution {
+  display: none;
 }

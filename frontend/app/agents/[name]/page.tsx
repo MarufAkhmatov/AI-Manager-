@@ -61,40 +61,40 @@ export default function AgentPage({ params }: { params: Promise<{ name: string }
   if (!meta) {
     return (
       <main className="p-8">
-        <Link href="/dashboard" className="text-sm text-bone-200 hover:text-accent">
+        <Link href="/dashboard" className="text-sm text-text-dim hover:text-accent">
           ← Dashboard
         </Link>
-        <p className="mt-6 text-bone-300">Unknown agent.</p>
+        <p className="mt-6 text-text-dim">Unknown agent.</p>
       </main>
     );
   }
 
   return (
     <main className="min-h-screen p-8">
-      <Link href="/dashboard" className="text-sm text-bone-200 hover:text-accent">
+      <Link href="/dashboard" className="text-sm text-text-dim hover:text-accent">
         ← Dashboard
       </Link>
       <h1 className="mt-6 text-2xl font-semibold">{meta.full}</h1>
-      <p className="mt-2 max-w-2xl text-sm text-bone-200">{meta.blurb}</p>
+      <p className="mt-2 max-w-2xl text-sm text-text-dim">{meta.blurb}</p>
 
       <NeoCard className="mt-8">
-        <h2 className="mb-4 text-sm uppercase tracking-wider text-bone-300">
+        <h2 className="mb-4 text-sm uppercase tracking-wider text-text-dim">
           Recent activity
         </h2>
         {err && <p className="text-xs text-red-400">{err}</p>}
         {logs.length === 0 && !err && (
-          <p className="text-xs text-bone-400">No events yet.</p>
+          <p className="text-xs text-text-dim opacity-60">No events yet.</p>
         )}
         <ul className="space-y-2">
           {logs.map((l) => (
             <li key={l.id} className="neo-in px-3 py-2 text-xs">
-              <div className="flex items-center justify-between text-white/70">
+              <div className="flex items-center justify-between text-text-dim">
                 <span className="font-medium text-accent">{l.event}</span>
-                <span className="font-mono text-[10px] text-bone-300">
+                <span className="font-mono text-[10px] text-text-dim">
                   {l.ms_elapsed ?? "-"}ms
                 </span>
               </div>
-              <div className="mt-1 font-mono text-[10px] text-bone-200">
+              <div className="mt-1 font-mono text-[10px] text-text-dim">
                 {new Date(l.created_at).toLocaleTimeString()}
               </div>
             </li>

@@ -65,18 +65,23 @@ export function ChatPanel({ onAgentsActive }: Props) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex-1 overflow-y-auto space-y-3 p-1">
+      <div className="flex-1 overflow-y-auto space-y-3 p-1 scrollbar-thin">
+        {messages.length === 0 && (
+          <div className="grid h-full place-items-center text-xs text-text-dim">
+            Yangi savol bilan boshlang — AI Manager kerakli agentlarni o'zi tanlaydi.
+          </div>
+        )}
         {messages.map((m, i) => (
           <div
             key={i}
             className={m.role === "user" ? "neo px-4 py-3" : "neo-in px-4 py-3"}
           >
-            <div className="mb-1 text-[10px] uppercase tracking-wide text-bone-300">
+            <div className="mb-1 text-[10px] uppercase tracking-wide text-text-dim">
               {m.role}
             </div>
-            <div className="whitespace-pre-wrap text-sm text-white/90">{m.text}</div>
+            <div className="whitespace-pre-wrap text-sm text-text">{m.text}</div>
             {m.meta && (
-              <div className="mt-2 text-[10px] text-bone-300">
+              <div className="mt-2 text-[10px] text-text-dim">
                 {m.meta.agents_used.join(" · ")} · {m.meta.ms_total}ms
               </div>
             )}

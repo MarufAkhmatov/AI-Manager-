@@ -5,7 +5,7 @@ export function Input({ className, ...rest }: InputHTMLAttributes<HTMLInputEleme
   return (
     <input
       className={cn(
-        "neo-in w-full px-4 py-3 text-sm text-white placeholder:text-bone-300",
+        "neo-in w-full px-4 py-3 text-sm text-text placeholder:text-text-dim",
         "outline-none focus:accent-pulse",
         className,
       )}

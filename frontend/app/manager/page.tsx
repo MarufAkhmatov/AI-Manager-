@@ -12,13 +12,13 @@ export default function ManagerPage() {
   return (
     <main className="grid h-screen grid-cols-[260px_1fr_360px] gap-4 p-4">
       <aside className="neo p-4">
-        <Link href="/dashboard" className="block text-sm text-bone-200 hover:text-accent">
+        <Link href="/dashboard" className="block text-sm text-text-dim hover:text-accent">
           ← Dashboard
         </Link>
-        <h2 className="mt-6 text-xs uppercase tracking-wider text-bone-300">
+        <h2 className="mt-6 text-xs uppercase tracking-wider text-text-dim">
           Conversations
         </h2>
-        <p className="mt-2 text-xs text-bone-400">
+        <p className="mt-2 text-xs text-text-dim opacity-60">
           Multi-conversation history is local-only and lands in a follow-up.
         </p>
       </aside>
