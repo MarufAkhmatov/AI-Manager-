@@ -71,10 +71,10 @@ $acl.Access | ForEach-Object { [void]$acl.RemoveAccessRule($_) }
 
 $me = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 $rules = @(
-    New-Object System.Security.AccessControl.FileSystemAccessRule(
+    [System.Security.AccessControl.FileSystemAccessRule]::new(
         $me, 'FullControl',
         'ContainerInherit,ObjectInherit', 'None', 'Allow'),
-    New-Object System.Security.AccessControl.FileSystemAccessRule(
+    [System.Security.AccessControl.FileSystemAccessRule]::new(
         'NT AUTHORITY\SYSTEM', 'FullControl',
         'ContainerInherit,ObjectInherit', 'None', 'Allow')
 )
