@@ -75,10 +75,10 @@ export const ManagerAvatar = (props: AvatarProps) => (
   <Frame bg="#1e1e1e" {...props}>
     <path d="M28 42 Q50 22 72 42 L70 50 Q50 36 30 50 Z" fill={HAIR_DARK} />
     <circle cx="50" cy="54" r="20" fill={SKIN_LIGHT} />
-    <Eyes y="52" />
+    <Eyes y={52} />
     <path d="M36 46 Q40 44 44 46" stroke="#1a1a1a" strokeWidth="1.4" fill="none" strokeLinecap="round" />
     <path d="M56 46 Q60 44 64 46" stroke="#1a1a1a" strokeWidth="1.4" fill="none" strokeLinecap="round" />
-    <Mouth smile={0.55} y="64" />
+    <Mouth smile={0.55} y={64} />
     <path d="M46 76 L50 82 L54 76 L52 96 L48 96 Z" fill={ACCENT} />
     <path d="M30 76 L46 76 L50 82 L54 76 L70 76 L66 96 L34 96 Z" fill="#222" />
   </Frame>
@@ -92,8 +92,8 @@ export const ArchitectAvatar = (props: AvatarProps) => (
     <circle cx="50" cy="56" r="20" fill={SKIN_MED} />
     <path d="M30 48 Q34 60 32 66" stroke={HAIR_MID} strokeWidth="2" fill="none" />
     <path d="M70 48 Q66 60 68 66" stroke={HAIR_MID} strokeWidth="2" fill="none" />
-    <Eyes y="56" />
-    <Mouth smile={0.45} y="68" />
+    <Eyes y={56} />
+    <Mouth smile={0.45} y={68} />
     <path d="M28 80 Q50 72 72 80 L72 96 L28 96 Z" fill="#262626" />
   </Frame>
 );
@@ -103,8 +103,8 @@ export const SecureAvatar = (props: AvatarProps) => (
   <Frame bg="#161616" {...props}>
     <path d="M30 46 Q50 26 70 46 L70 52 Q50 40 30 52 Z" fill={HAIR_DARK} />
     <circle cx="50" cy="56" r="20" fill={SKIN_LIGHT} />
-    <Eyes y="54" />
-    <Mouth smile={0.25} y="64" />
+    <Eyes y={54} />
+    <Mouth smile={0.25} y={64} />
     <path d="M36 64 Q50 78 64 64 Q60 76 50 78 Q40 76 36 64 Z" fill={HAIR_DARK} opacity="0.85" />
     <path d="M30 80 L50 88 L70 80 L66 96 L34 96 Z" fill="#222" />
     <path d="M44 82 L50 86 L56 82 L54 90 L46 90 Z" fill={ACCENT} opacity="0.9" />
@@ -122,7 +122,7 @@ export const SearcherAvatar = (props: AvatarProps) => (
     <path d="M47 54 L53 54" stroke="#1a1a1a" strokeWidth="1.4" />
     <circle cx="42" cy="54" r="1.5" fill="#1a1a1a" />
     <circle cx="58" cy="54" r="1.5" fill="#1a1a1a" />
-    <Mouth smile={0.65} y="66" />
+    <Mouth smile={0.65} y={66} />
     <path d="M28 82 Q50 74 72 82 L72 96 L28 96 Z" fill="#262626" />
   </Frame>
 );
@@ -134,10 +134,10 @@ export const MetodistAvatar = (props: AvatarProps) => (
     <path d="M28 50 Q30 42 36 40 L36 60 Z" fill={HAIR_LIGHT} />
     <path d="M72 50 Q70 42 64 40 L64 60 Z" fill={HAIR_LIGHT} />
     <circle cx="50" cy="56" r="18" fill={SKIN_LIGHT} />
-    <Eyes y="54" />
+    <Eyes y={54} />
     <path d="M37 48 Q42 47 46 49" stroke="#3a3a3a" strokeWidth="1.2" fill="none" strokeLinecap="round" />
     <path d="M54 49 Q58 47 63 48" stroke="#3a3a3a" strokeWidth="1.2" fill="none" strokeLinecap="round" />
-    <Mouth smile={0.6} y="66" />
+    <Mouth smile={0.6} y={66} />
     <path d="M30 82 Q50 76 70 82 L70 96 L30 96 Z" fill="#262626" />
     <path d="M44 80 L50 86 L56 80 L52 92 L48 92 Z" fill="#0c0c0c" />
   </Frame>
@@ -158,8 +158,8 @@ export const ShadowAvatar = (props: AvatarProps) => (
       strokeWidth="1.2"
     />
     <ellipse cx="50" cy="58" rx="14" ry="16" fill={SKIN_MED} />
-    <Eyes y="58" color="#0a0a0a" />
-    <Mouth smile={0.15} y="68" />
+    <Eyes y={58} color="#0a0a0a" />
+    <Mouth smile={0.15} y={68} />
     <path d="M36 52 Q40 58 42 64" stroke={HAIR_DARK} strokeWidth="1.4" fill="none" />
     <path d="M64 52 Q60 58 58 64" stroke={HAIR_DARK} strokeWidth="1.4" fill="none" />
   </Frame>
@@ -170,8 +170,8 @@ export const RegulyatorAvatar = (props: AvatarProps) => (
   <Frame bg="#1e1e1e" {...props}>
     <path d="M24 46 Q26 28 50 22 Q74 28 76 46 L72 84 L28 84 Z" fill={HAIR_LIGHT} />
     <circle cx="50" cy="56" r="18" fill={SKIN_LIGHT} />
-    <Eyes y="55" />
-    <Mouth smile={0.7} y="66" />
+    <Eyes y={55} />
+    <Mouth smile={0.7} y={66} />
     <path
       d="M30 50 Q32 36 50 34 Q68 36 70 50"
       stroke="#1a1a1a"

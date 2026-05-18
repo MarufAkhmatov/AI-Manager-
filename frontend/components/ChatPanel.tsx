@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { ArrowUp, Plus } from "lucide-react";
 import { api } from "@/lib/api";
+import { cn } from "@/lib/cn";
 
-interface ChatResponse {
+export interface ChatResponse {
   task_id: string;
   agents_used: string[];
   response: Record<string, unknown>;
@@ -26,9 +26,10 @@ interface Message {
 
 interface Props {
   onAgentsActive(agents: string[]): void;
+  onResponse?(response: ChatResponse): void;
 }
 
-export function ChatPanel({ onAgentsActive }: Props) {
+export function ChatPanel({ onAgentsActive, onResponse }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -45,13 +46,10 @@ export function ChatPanel({ onAgentsActive }: Props) {
         body: JSON.stringify({ message: q }),
       });
       onAgentsActive(res.agents_used);
+      onResponse?.(res);
       setMessages((prev) => [
         ...prev,
-        {
-          role: "assistant",
-          text: renderResponse(res),
-          meta: res,
-        },
+        { role: "assistant", text: renderResponse(res), meta: res },
       ]);
     } catch (e) {
       setMessages((prev) => [
@@ -65,32 +63,46 @@ export function ChatPanel({ onAgentsActive }: Props) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex-1 overflow-y-auto space-y-3 p-1 scrollbar-thin">
+      <div className="flex-1 overflow-y-auto space-y-3 px-4 pt-3 scrollbar-thin">
         {messages.length === 0 && (
-          <div className="grid h-full place-items-center text-xs text-text-dim">
-            Yangi savol bilan boshlang — AI Manager kerakli agentlarni o'zi tanlaydi.
+          <div className="grid h-full place-items-center text-xs text-white/35">
+            Yangi savol bilan boshlang — AI Manager kerakli agentlarni o&apos;zi tanlaydi.
           </div>
         )}
         {messages.map((m, i) => (
           <div
             key={i}
-            className={m.role === "user" ? "neo px-4 py-3" : "neo-in px-4 py-3"}
+            className={cn(
+              "rounded-xl border px-4 py-3",
+              m.role === "user"
+                ? "border-white/10 bg-white/[0.03]"
+                : "border-white/5 bg-black/40",
+            )}
           >
-            <div className="mb-1 text-[10px] uppercase tracking-wide text-text-dim">
+            <div className="mb-1 text-[10px] uppercase tracking-wider text-white/35">
               {m.role}
             </div>
-            <div className="whitespace-pre-wrap text-sm text-text">{m.text}</div>
+            <div className="whitespace-pre-wrap text-sm text-white/90">{m.text}</div>
             {m.meta && (
-              <div className="mt-2 text-[10px] text-text-dim">
+              <div className="mt-2 text-[10px] text-white/30">
                 {m.meta.agents_used.join(" · ")} · {m.meta.ms_total}ms
               </div>
             )}
           </div>
         ))}
       </div>
-      <div className="mt-3 flex gap-2">
-        <Input
-          placeholder="Ask the AI Manager…"
+
+      {/* Footer: + on the far left, free text in the middle, ↑ on the far right. */}
+      <div className="flex items-center gap-3 border-t border-white/5 px-3 py-2.5">
+        <button
+          type="button"
+          aria-label="Attach"
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-white/55 transition hover:border-white/25 hover:text-white"
+        >
+          <Plus size={14} />
+        </button>
+        <input
+          type="text"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
@@ -100,10 +112,18 @@ export function ChatPanel({ onAgentsActive }: Props) {
             }
           }}
           disabled={busy}
+          placeholder="Ask the AI Manager…"
+          className="flex-1 bg-transparent text-sm text-white placeholder:text-white/30 outline-none disabled:opacity-50"
         />
-        <Button onClick={send} disabled={busy || !draft.trim()}>
-          Send
-        </Button>
+        <button
+          type="button"
+          onClick={send}
+          disabled={busy || !draft.trim()}
+          aria-label="Send"
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-black transition hover:bg-white/85 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <ArrowUp size={14} strokeWidth={2.4} />
+        </button>
       </div>
     </div>
   );
