@@ -25,6 +25,14 @@ class Settings(BaseSettings):
 
     aim_root: Path = Field(default=Path(r"C:\Users\ASUS\Desktop\AI Manager"))
 
+    # Path to the standalone "AI Metodist Agent" Python package that powers the
+    # `app.agents.metodist` sub-agent. The wrapper imports `metodist_agent.agent`
+    # (operator runs `pip install -e <this path>` into the platform venv) and
+    # reads this folder's `.env` for `ANTHROPIC_API_KEY`. See agents/metodist.py.
+    metodist_standalone_path: Path = Field(
+        default=Path(r"C:\Users\ASUS\Desktop\AI Manager\KB\AI Metodist Agent")
+    )
+
     database_url: str = "postgresql+asyncpg://ai_manager:change-me@postgres:5432/ai_manager"
     redis_url: str = "redis://redis:6379/0"
 
