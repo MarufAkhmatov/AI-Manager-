@@ -11,11 +11,11 @@ export function Button({
   return (
     <button
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-2 text-sm font-medium transition",
+        "inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2 text-sm font-medium transition",
         "disabled:opacity-50 disabled:cursor-not-allowed",
         variant === "primary"
-          ? "bg-accent text-accent-ink hover:bg-accent-dim active:translate-y-px"
-          : "border border-line text-text-dim hover:text-text hover:border-accent",
+          ? "bg-neon text-black shadow-neon-sm hover:bg-neon/90 hover:shadow-neon-md active:translate-y-px"
+          : "border border-line text-text-dim hover:text-white hover:border-neon",
         className,
       )}
       {...rest}

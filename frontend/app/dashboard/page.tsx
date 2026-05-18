@@ -1,12 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { OrgChart, ALL_SUBS } from "@/components/OrgChart";
-import { Panel } from "@/components/Panel";
-import { ChatPanel, type ChatResponse } from "@/components/ChatPanel";
-import { RecommendationPanel } from "@/components/RecommendationPanel";
-import { AvatarStack } from "@/components/AvatarStack";
-import { TopMenuBar } from "@/components/TopMenuBar";
+import { TopHeader } from "@/components/TopHeader";
+import { WorkflowCanvas } from "@/components/WorkflowCanvas";
 import { openActivityWS } from "@/lib/api";
 
 interface ActivityEvent {
@@ -17,13 +13,27 @@ interface ActivityEvent {
 // Agents that emitted an event in the last ACTIVE_WINDOW_MS pulse on the chart.
 const ACTIVE_WINDOW_MS = 4000;
 
+// Demo-mode lights every edge for a few seconds so the operator can see the
+// running visualisation without typing into the chat.
+const DEMO_MS = 4500;
+
+const ALL_AGENTS = [
+  "AI Manager",
+  "AI Architect",
+  "AI Metodist",
+  "AI Searcher",
+  "AI Shadow",
+  "AI Regulyator",
+  "AI Secure",
+];
+
 export default function DashboardPage() {
   const [activeAgents, setActiveAgents] = useState<string[]>([]);
   const [recentByAgent, setRecentByAgent] = useState<Record<string, number>>({});
-  const [lastResponse, setLastResponse] = useState<ChatResponse | null>(null);
+  const [demoUntil, setDemoUntil] = useState<number>(0);
 
-  // Background pulse from /ws/activity so the chart highlights agents even
-  // when the operator isn't chatting (Architect ingesting, Regulyator crawling).
+  // Real-time activity stream — keeps the canvas in sync with background
+  // work (Architect ingesting, Regulyator crawling, etc.).
   useEffect(() => {
     const ws = openActivityWS();
     ws.onmessage = (msg) => {
@@ -37,48 +47,49 @@ export default function DashboardPage() {
     return () => ws.close();
   }, []);
 
-  // Derive the active set every second from the recency map and union it with
-  // the explicit chat-triggered list.
+  // Derive the active set every 800ms by combining the recency map, chat-
+  // triggered agents, and demo-mode override.
   useEffect(() => {
     const t = setInterval(() => {
       const now = Date.now();
-      const active = Object.entries(recentByAgent)
+      const recent = Object.entries(recentByAgent)
         .filter(([, ts]) => now - ts < ACTIVE_WINDOW_MS)
         .map(([name]) => name);
-      setActiveAgents((prev) => Array.from(new Set([...prev, ...active])));
+      const demo = now < demoUntil ? ALL_AGENTS : [];
+      setActiveAgents((prev) =>
+        Array.from(new Set([...prev, ...recent, ...demo])),
+      );
     }, 800);
     return () => clearInterval(t);
-  }, [recentByAgent]);
+  }, [recentByAgent, demoUntil]);
+
+  const isRunning = activeAgents.length > 0 || Date.now() < demoUntil;
+
+  function handleRun() {
+    if (isRunning) {
+      // stop demo immediately and clear chat-active set; live WS events keep
+      // their own recency, so they'll drop out naturally inside 4s.
+      setDemoUntil(0);
+      setActiveAgents([]);
+    } else {
+      setDemoUntil(Date.now() + DEMO_MS);
+    }
+  }
 
   return (
-    <main className="flex min-h-screen flex-col gap-6 bg-black pb-6 pt-3">
-      <TopMenuBar />
-
-      <section className="mx-3 mt-2">
-        <OrgChart activeAgents={activeAgents} />
-      </section>
-
-      <section className="mx-3 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Panel title="AI MANAGER  CHAT">
-          <ChatPanel
-            onAgentsActive={setActiveAgents}
-            onResponse={setLastResponse}
-          />
-        </Panel>
-
-        <Panel
-          title="AI MANAGER RECOMMENDATION"
-          rightSlot={
-            <AvatarStack
-              slugs={ALL_SUBS.map((s) => s.slug)}
-              size={22}
-              className="mr-1"
-            />
-          }
-        >
-          <RecommendationPanel response={lastResponse} />
-        </Panel>
-      </section>
+    <main className="relative flex h-screen w-screen flex-col overflow-hidden bg-bg text-white">
+      <TopHeader
+        isRunning={isRunning}
+        activeAgents={activeAgents}
+        onRun={handleRun}
+      />
+      <div className="relative flex-1">
+        <WorkflowCanvas
+          isRunning={isRunning}
+          activeAgents={activeAgents}
+          onAgentsActive={setActiveAgents}
+        />
+      </div>
     </main>
   );
 }

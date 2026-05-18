@@ -6,30 +6,39 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        bg: "var(--bg)",
-        surface: "var(--surface)",
-        "surface-2": "var(--surface-2)",
-        line: "var(--line)",
-        text: "var(--text)",
-        "text-dim": "var(--text-dim)",
-        // Accent is monochrome — pure white in dark mode, pure black in
-        // light mode — and resolved via CSS variables. No coloured hue.
-        accent: {
-          DEFAULT: "var(--accent)",
-          dim: "var(--accent-dim)",
-          soft: "var(--accent-soft)",
-          ink: "var(--accent-ink)",
+        // Palette mirrors the AI-Workflow Figma export so the AI Manager
+        // dashboard reads as the same product family.
+        bg: "#050505",
+        surface: "rgba(255, 255, 255, 0.04)",
+        "surface-2": "rgba(255, 255, 255, 0.05)",
+        line: "rgba(255, 255, 255, 0.10)",
+        text: "#ffffff",
+        "text-dim": "rgba(255, 255, 255, 0.6)",
+        // Neon green primary — for active states, running glow, accent
+        // buttons. Yellow secondary — for KB-related running paths.
+        neon: {
+          DEFAULT: "#22ff88",
+          dim: "rgba(34, 255, 136, 0.5)",
+          soft: "rgba(34, 255, 136, 0.10)",
         },
+        amber: {
+          DEFAULT: "#ffcc00",
+          soft: "rgba(255, 204, 0, 0.10)",
+        },
+        danger: "#ff4f5e",
+        // Backwards-compat alias so the KB and per-agent pages keep
+        // resolving the old "accent" colour without a rewrite.
+        accent: "#22ff88",
       },
       boxShadow: {
-        neo: "var(--shadow-neo)",
-        "neo-in": "var(--shadow-neo-in)",
-        glow: "var(--shadow-glow)",
+        "neon-sm": "0 0 10px rgba(34, 255, 136, 0.35)",
+        "neon-md": "0 0 22px rgba(34, 255, 136, 0.25)",
+        "neon-lg": "0 0 40px rgba(34, 255, 136, 0.25)",
+        "amber-md": "0 0 22px rgba(255, 204, 0, 0.25)",
       },
       backdropBlur: { glass: "18px" },
-      borderRadius: { glass: "20px" },
       fontFamily: {
-        sans: ["ui-sans-serif", "system-ui", "Inter", "Helvetica"],
+        sans: ["Inter", "ui-sans-serif", "system-ui", "Helvetica"],
         mono: ["ui-monospace", "Menlo", "monospace"],
       },
     },
