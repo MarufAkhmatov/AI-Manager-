@@ -3,10 +3,18 @@
 Flow per request:
   1. Intent detection (rule-based; LLM fallback hook reserved).
   2. Plan: select sub-agents based on intent.
-  3. Parallel dispatch with a per-agent 2.2s soft deadline
-     (slow agents return partials).
+  3. Parallel dispatch with a **per-agent** soft deadline (see
+     `AGENT_DEADLINES_S`). Slow agents return partials, fast agents
+     are not penalised by a single global cap.
   4. Aggregate into one AgentResult.
   5. **Mandatory** pass through AI Secure (egress sanitizer).
+
+Latency budget
+- Pure AI Searcher queries finish well under 3 s (HNSW + Redis warm hit).
+- Queries that touch AI Metodist take up to ~15 s — the standalone
+  wraps a Claude API call plus hybrid retrieval. The BGE-M3 model is
+  pre-warmed at FastAPI boot (see `app/main.py::lifespan`) so the first
+  user-facing call doesn't eat the ~30 s cold-load on top.
 """
 
 from __future__ import annotations
@@ -22,7 +30,15 @@ from app.agents.searcher import searcher
 from app.agents.secure import secure
 from app.events import emit
 
-AGENT_DEADLINE_S = 2.2
+# Per-agent soft deadlines. Anything not listed gets `DEFAULT_DEADLINE_S`.
+# Numbers chosen for the typical workload, not the worst case — we want
+# slow agents to drop out of partials before they hold up the response.
+AGENT_DEADLINES_S: dict[str, float] = {
+    "AI Searcher": 2.2,
+    "AI Shadow": 2.5,
+    "AI Metodist": 15.0,  # Claude API + retrieval; model is pre-warmed at boot
+}
+DEFAULT_DEADLINE_S = 2.2
 
 
 def _detect_intent(q: str) -> set[str]:
@@ -77,8 +93,9 @@ def _registry() -> dict[str, Agent]:
 
 
 async def _run_with_deadline(agent: Agent, ctx: AgentContext) -> AgentResult | None:
+    deadline = AGENT_DEADLINES_S.get(agent.name, DEFAULT_DEADLINE_S)
     try:
-        return await asyncio.wait_for(agent.run(ctx), timeout=AGENT_DEADLINE_S)
+        return await asyncio.wait_for(agent.run(ctx), timeout=deadline)
     except asyncio.TimeoutError:
         await emit(agent.name, "timeout", task_id=str(ctx.task_id))
         return None

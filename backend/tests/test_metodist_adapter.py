@@ -8,6 +8,7 @@ contract: mode routing, citation mapping, error handling, event emission.
 
 from __future__ import annotations
 
+import asyncio
 import sys
 import types
 import uuid
@@ -162,6 +163,18 @@ async def test_emits_standalone_call_and_done(fake_standalone) -> None:
     names = [(e.agent, e.event) for e in events]
     assert ("AI Metodist", "standalone.call") in names
     assert ("AI Metodist", "standalone.done") in names
+
+
+async def test_prewarm_resolves_singleton_without_raising(fake_standalone) -> None:
+    """The FastAPI lifespan calls `_get_or_init_agent` in a thread so the
+    BGE-M3 model is loaded before the first request. The hook must return
+    a usable Agent and remain idempotent — re-calling never re-instantiates."""
+    from app.agents.metodist import _get_or_init_agent
+
+    first = await asyncio.to_thread(_get_or_init_agent)
+    second = await asyncio.to_thread(_get_or_init_agent)
+    assert first is second
+    assert fake_standalone["init_count"] == 1
 
 
 async def test_standalone_error_returns_clean_agent_result(monkeypatch) -> None:
