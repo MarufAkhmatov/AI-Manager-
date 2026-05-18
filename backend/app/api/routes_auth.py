@@ -9,6 +9,7 @@ from sqlalchemy import select
 from app.db.models import User
 from app.db.session import session_scope
 from app.deps import AuthUser, current_user
+from app.security.audit import record as audit
 from app.security.jwt import issue_token
 from app.security.passwords import verify_password
 
@@ -31,10 +32,13 @@ async def login(body: LoginIn) -> LoginOut:
     async with session_scope() as session:
         user = await session.scalar(select(User).where(User.username == body.username))
     if user is None or user.disabled_at is not None:
+        await audit("auth.login.failed", username=body.username, reason="unknown_or_disabled")
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="invalid credentials")
     if not verify_password(body.password, user.password_hash):
+        await audit("auth.login.failed", username=body.username, reason="bad_password")
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="invalid credentials")
 
+    await audit("auth.login.ok", user_id=str(user.id), username=user.username, role=user.role)
     token = issue_token(user_id=user.id, username=user.username, role=user.role)
     return LoginOut(
         access_token=token,

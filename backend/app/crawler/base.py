@@ -17,6 +17,7 @@ from datetime import date
 import httpx
 
 from app.config import get_settings
+from app.security.outbound_whitelist import make_client
 
 
 @dataclass(slots=True)
@@ -39,7 +40,11 @@ class BaseCrawler(ABC):
             raise RuntimeError(
                 f"{self.name}: host {self.allowed_host!r} not in CRAWL_ALLOWED_HOSTS"
             )
-        self._client = httpx.AsyncClient(
+        # Belt-and-braces: the transport refuses any host other than the one
+        # this crawler is bound to, *and* the per-call check below catches
+        # any caller that forgot to use _get().
+        self._client = make_client(
+            allowed=(self.allowed_host,),
             timeout=30,
             follow_redirects=True,
             headers={"User-Agent": "ai-manager-platform/0.1 (+local)"},
