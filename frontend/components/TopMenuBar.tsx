@@ -2,14 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Database, LayoutDashboard, LogOut, MessagesSquare } from "lucide-react";
+import { Database, LayoutDashboard, LogOut } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { cn } from "@/lib/cn";
 import { logout } from "@/lib/api";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/manager", label: "Full Chat", icon: MessagesSquare },
   { href: "/kb", label: "Knowledge Base", icon: Database },
 ];
 
@@ -24,7 +23,7 @@ export function TopMenuBar() {
   return (
     <header className="glass sticky top-3 z-40 mx-3 flex items-center justify-between px-4 py-2">
       <Link href="/dashboard" className="flex items-center gap-2">
-        <div className="h-7 w-7 rounded-lg bg-accent shadow-glow" />
+        <div className="h-7 w-7 rounded-lg border border-line bg-surface-2 shadow-neo-in" />
         <span className="text-sm font-semibold tracking-wide text-text">
           AI Manager Platform
         </span>

@@ -2,41 +2,57 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ---------- Theme tokens ---------- */
+/* ---------- Theme tokens (monochrome) ---------- */
 /* Dark is the default. The .light class on <html> swaps the palette. */
 :root,
 .dark {
-  --bg: #07120c;
-  --surface: rgba(20, 28, 23, 0.62);
-  --surface-2: #0b1812;
-  --line: rgba(255, 255, 255, 0.06);
-  --text: #f3fff8;
-  --text-dim: #9bb2a4;
+  --bg: #000000;
+  --surface: rgba(255, 255, 255, 0.04);
+  --surface-2: #0d0d0d;
+  --line: rgba(255, 255, 255, 0.08);
+  --text: #f5f5f5;
+  --text-dim: #9a9a9a;
+
+  --accent: #ffffff;
+  --accent-dim: #d4d4d4;
+  --accent-soft: rgba(255, 255, 255, 0.10);
+  --accent-ink: #000000;
 
   --shadow-neo:
-    8px 8px 24px rgba(0, 0, 0, 0.65),
-    -2px -2px 8px rgba(255, 255, 255, 0.04);
+    8px 8px 24px rgba(0, 0, 0, 0.85),
+    -2px -2px 8px rgba(255, 255, 255, 0.03);
   --shadow-neo-in:
-    inset 4px 4px 12px rgba(0, 0, 0, 0.75),
-    inset -2px -2px 8px rgba(255, 255, 255, 0.03);
+    inset 4px 4px 12px rgba(0, 0, 0, 0.9),
+    inset -2px -2px 8px rgba(255, 255, 255, 0.025);
+  --shadow-glow:
+    0 0 0 1px rgba(255, 255, 255, 0.45),
+    0 0 22px rgba(255, 255, 255, 0.18);
 
   color-scheme: dark;
 }
 
 .light {
-  --bg: #f1f7f3;
-  --surface: rgba(255, 255, 255, 0.66);
-  --surface-2: #ffffff;
-  --line: rgba(0, 0, 0, 0.08);
-  --text: #0f1a14;
-  --text-dim: #4a5a52;
+  --bg: #ffffff;
+  --surface: rgba(0, 0, 0, 0.03);
+  --surface-2: #fafafa;
+  --line: rgba(0, 0, 0, 0.10);
+  --text: #0a0a0a;
+  --text-dim: #5a5a5a;
+
+  --accent: #0a0a0a;
+  --accent-dim: #2e2e2e;
+  --accent-soft: rgba(10, 10, 10, 0.08);
+  --accent-ink: #ffffff;
 
   --shadow-neo:
-    8px 8px 24px rgba(15, 26, 20, 0.12),
+    8px 8px 24px rgba(0, 0, 0, 0.10),
     -2px -2px 8px rgba(255, 255, 255, 0.9);
   --shadow-neo-in:
-    inset 4px 4px 10px rgba(15, 26, 20, 0.08),
-    inset -2px -2px 8px rgba(255, 255, 255, 0.9);
+    inset 4px 4px 10px rgba(0, 0, 0, 0.07),
+    inset -2px -2px 8px rgba(255, 255, 255, 0.95);
+  --shadow-glow:
+    0 0 0 1px rgba(10, 10, 10, 0.45),
+    0 0 18px rgba(10, 10, 10, 0.14);
 
   color-scheme: light;
 }
@@ -50,11 +66,6 @@ body {
 
 body {
   font-family: ui-sans-serif, system-ui, "Inter", Helvetica, sans-serif;
-  /* Soft green radial accents — same hue in both themes, different opacity. */
-  background:
-    radial-gradient(1200px 600px at 80% -10%, rgba(34, 213, 143, 0.10), transparent 60%),
-    radial-gradient(900px 500px at -10% 90%, rgba(34, 213, 143, 0.07), transparent 60%),
-    var(--bg);
 }
 
 /* ---------- Reusable surfaces ---------- */
@@ -81,9 +92,7 @@ body {
 }
 
 .accent-pulse {
-  box-shadow:
-    0 0 0 1px rgba(34, 213, 143, 0.55),
-    0 0 24px rgba(34, 213, 143, 0.35);
+  box-shadow: var(--shadow-glow);
 }
 
 .scrollbar-thin::-webkit-scrollbar {
@@ -107,11 +116,11 @@ body {
 .react-flow__edge-path {
   stroke: var(--text-dim);
   stroke-width: 1.4;
-  opacity: 0.55;
+  opacity: 0.45;
 }
 .react-flow__edge.active .react-flow__edge-path,
 .react-flow__edge.animated .react-flow__edge-path {
-  stroke: #22d58f;
+  stroke: var(--accent);
   opacity: 0.95;
 }
 .react-flow__controls {
@@ -127,7 +136,7 @@ body {
 }
 .react-flow__controls-button:hover {
   background: var(--surface);
-  color: #22d58f;
+  color: var(--accent);
 }
 .react-flow__attribution {
   display: none;

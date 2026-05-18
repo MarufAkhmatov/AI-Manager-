@@ -32,7 +32,7 @@ export function ResizableChatPanel({ onAgentsActive }: Props) {
     >
       <header className="mb-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="h-2 w-2 rounded-full bg-accent shadow-glow" />
+          <div className="h-2 w-2 rounded-full bg-text-dim" />
           <span className="text-xs font-medium uppercase tracking-wider text-text-dim">
             AI Manager — chat
           </span>

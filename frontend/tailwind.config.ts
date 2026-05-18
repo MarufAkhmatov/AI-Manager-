@@ -6,25 +6,25 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Surfaces resolve to CSS variables so the same class works in
-        // light + dark themes. See app/globals.css for the palettes.
         bg: "var(--bg)",
         surface: "var(--surface)",
         "surface-2": "var(--surface-2)",
         line: "var(--line)",
         text: "var(--text)",
         "text-dim": "var(--text-dim)",
-        // Brand: a single green used for active / focus / accent states.
+        // Accent is monochrome — pure white in dark mode, pure black in
+        // light mode — and resolved via CSS variables. No coloured hue.
         accent: {
-          DEFAULT: "#22D58F",
-          dim: "#16A36B",
-          soft: "rgba(34,213,143,0.18)",
+          DEFAULT: "var(--accent)",
+          dim: "var(--accent-dim)",
+          soft: "var(--accent-soft)",
+          ink: "var(--accent-ink)",
         },
       },
       boxShadow: {
         neo: "var(--shadow-neo)",
         "neo-in": "var(--shadow-neo-in)",
-        glow: "0 0 0 1px rgba(34,213,143,0.45), 0 0 24px rgba(34,213,143,0.28)",
+        glow: "var(--shadow-glow)",
       },
       backdropBlur: { glass: "18px" },
       borderRadius: { glass: "20px" },

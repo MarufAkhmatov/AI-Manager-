@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AgentOrgChart } from "@/components/AgentOrgChart";
+import { AgentWorkflow } from "@/components/AgentWorkflow";
 import { ResizableChatPanel } from "@/components/ResizableChatPanel";
 import { TopMenuBar } from "@/components/TopMenuBar";
 import { openActivityWS } from "@/lib/api";
@@ -53,7 +53,7 @@ export default function DashboardPage() {
       <TopMenuBar />
 
       <section className="mx-3 flex-1 min-h-[460px]">
-        <AgentOrgChart activeAgents={activeAgents} />
+        <AgentWorkflow activeAgents={activeAgents} />
       </section>
 
       <section className="mx-3">
