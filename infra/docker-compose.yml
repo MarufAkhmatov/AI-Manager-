@@ -1,0 +1,85 @@
+name: ai-manager
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: aim-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ai_manager}
+      POSTGRES_USER: ${POSTGRES_USER:-ai_manager}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    volumes:
+      - aim-pg-data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ai_manager} -d ${POSTGRES_DB:-ai_manager}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: aim-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - aim-redis-data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: aim-ollama
+    volumes:
+      - aim-ollama-data:/root/.ollama
+    ports:
+      - "11434:11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: aim-api
+    env_file: ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    volumes:
+      # Mount the operator's runtime root. On Windows hosts the AIM_ROOT
+      # path is provided via .env; in dev set it to a local directory.
+      - ${AIM_ROOT}:/data/aim-root
+    environment:
+      AIM_ROOT: /data/aim-root
+    ports:
+      - "8000:8000"
+
+  web:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: aim-web
+    env_file: ../.env
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+
+volumes:
+  aim-pg-data:
+  aim-redis-data:
+  aim-ollama-data:
