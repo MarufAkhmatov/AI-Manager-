@@ -99,7 +99,13 @@ async def process_file(src: Path) -> uuid.UUID:
     )
 
     out_path = await _run_with_retry(
-        lambda: persist_chunks(doc_id, chunks, vectors),
+        lambda: persist_chunks(
+            doc_id,
+            chunks,
+            vectors,
+            full_text=norm.text,
+            headings=norm.headings,
+        ),
         stage="store",
         document_id=doc_id,
     )
