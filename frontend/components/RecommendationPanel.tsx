@@ -18,15 +18,16 @@ const ALL_AGENTS: Array<{ slug: AgentSlug; name: string }> = [
 
 interface Props {
   response: ChatResponse | null;
-  previewing: boolean;       // true while the auto-suggest debounce is in flight
-  busy: boolean;             // true during an explicit send
+  previewing: boolean;
+  busy: boolean;
   expanded: boolean;
   onToggleExpand(): void;
 }
 
-// Read-only output panel — AI's suggested answer, with a copy and a "save
-// as .doc" button. The avatar strip above the header lights up the agents
-// that contributed to the current response.
+// Read-only output panel — copy + Word + maximise controls. The avatar
+// strip sits ABOVE the panel section so that the section itself stays the
+// exact same height as the chat panel's section (perfect top/bottom
+// symmetry across the two panels).
 export function RecommendationPanel({
   response,
   previewing,
@@ -52,8 +53,6 @@ export function RecommendationPanel({
 
   function handleDownloadDoc() {
     if (!text) return;
-    // Word-friendly HTML wrapped in a .doc — opens directly in MS Word /
-    // LibreOffice without an external dep.
     const html = `<!DOCTYPE html>
 <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word">
 <head><meta charset="utf-8"><title>AI Manager Recommendation</title></head>
@@ -76,8 +75,12 @@ ${response ? `<hr><p style="font-size: 9pt; color: #555;">Agents: ${response.age
 
   return (
     <div className="flex h-full flex-col">
-      {/* Avatar strip ABOVE the panel header */}
-      <div data-drag-handle="true" className="mb-2 ml-3 flex items-center gap-2 cursor-grab active:cursor-grabbing select-none">
+      {/* Avatar strip — drag handle. Fixed height (~32px) so the panel
+          section below it remains symmetric with the chat panel section. */}
+      <div
+        data-drag-handle="true"
+        className="flex h-8 cursor-grab items-center gap-2 px-3 active:cursor-grabbing select-none"
+      >
         <AvatarStack items={items} size={22} />
         <span className="text-[10px] uppercase tracking-wider text-white/40">
           {response ? `${response.agents_used.length}/${ALL_AGENTS.length} agents` : "no agents"}
