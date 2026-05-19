@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+from dataclasses import asdict
 
 from sqlalchemy import select
 
@@ -104,7 +105,7 @@ class Searcher(Agent):
             json.dumps(
                 {
                     "payload": payload,
-                    "citations": [c.__dict__ for c in citations],
+                    "citations": [asdict(c) for c in citations],
                     "confidence": citations[0].score if citations else 0.0,
                     "confidential_origin": confidential,
                 }

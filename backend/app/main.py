@@ -6,6 +6,7 @@ import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.agents.architect import architect
 from app.agents.regulyator import regulyator
@@ -45,6 +46,23 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="AI Manager Platform", version="0.1.0", lifespan=lifespan)
+
+# CORS — the Next.js dev server runs on a different origin (3000) from the
+# FastAPI server (8000). Without this every fetch from the browser fails
+# with a CORS preflight error. The list mirrors the dev / Docker dashboards;
+# operators behind a reverse proxy who serve both on the same origin can
+# safely leave this in place (same-origin requests aren't subject to CORS).
+_DEFAULT_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_DEFAULT_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/healthz")

@@ -7,21 +7,52 @@ function authHeader(): Record<string, string> {
   return tok ? { Authorization: `Bearer ${tok}` } : {};
 }
 
+export class ApiError extends Error {
+  readonly status: number;
+  readonly kind: "auth" | "network" | "server" | "client";
+  constructor(message: string, status: number, kind: ApiError["kind"]) {
+    super(message);
+    this.status = status;
+    this.kind = kind;
+  }
+}
+
 export async function api<T = unknown>(
   path: string,
   init: RequestInit = {},
 ): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeader(),
-      ...(init.headers ?? {}),
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeader(),
+        ...(init.headers ?? {}),
+      },
+    });
+  } catch (e) {
+    // Aborts surface as `AbortError` — let the caller distinguish those
+    // from genuine network failures.
+    if ((e as Error).name === "AbortError") throw e;
+    throw new ApiError(
+      `Network error: ${(e as Error).message}`,
+      0,
+      "network",
+    );
+  }
+
+  if (res.status === 401) {
+    // Drop the stale token so the next page load goes back to /login.
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("aim_token");
+    }
+    throw new ApiError("Sessiya tugadi — qaytadan kiring", 401, "auth");
+  }
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`${res.status} ${res.statusText}: ${body}`);
+    const kind = res.status >= 500 ? "server" : "client";
+    throw new ApiError(body || res.statusText, res.status, kind);
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
@@ -50,5 +81,26 @@ export async function login(
 }
 
 export function logout(): void {
-  if (typeof window !== "undefined") window.localStorage.removeItem("aim_token");
+  if (typeof window !== "undefined") {
+    window.localStorage.removeItem("aim_token");
+    window.localStorage.removeItem("aim_user");
+  }
+}
+
+export function hasToken(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    window.localStorage.getItem("aim_token") != null
+  );
+}
+
+export function getCachedUser(): Me | null {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem("aim_user");
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as Me;
+  } catch {
+    return null;
+  }
 }

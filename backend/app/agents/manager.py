@@ -22,7 +22,7 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from dataclasses import replace
+from dataclasses import asdict
 from typing import Iterable
 
 from app.agents.base import Agent, AgentContext, AgentResult, Citation
@@ -127,25 +127,42 @@ def _aggregate(name: str, parts: Iterable[AgentResult]) -> AgentResult:
 class Manager:
     name = "AI Manager"
 
-    async def chat(
+    async def _run(
         self,
         *,
         query: str,
         user_id: uuid.UUID | None,
         role: str,
+        plan: set[str],
+        deadlines: dict[str, float] | None = None,
     ) -> dict:
+        """Shared body for `chat` and `suggest`. Differs only in (a) which
+        agents are in the plan and (b) which deadlines they get."""
         task_id = uuid.uuid4()
         ctx = AgentContext(task_id=task_id, user_id=user_id, role=role, query=query)
         start = time.perf_counter()
 
-        plan = _detect_intent(query)
         await emit(
             self.name, "plan", task_id=str(task_id), agents=sorted(plan), query=query[:200]
         )
 
         reg = _registry()
         runnable = [reg[a] for a in plan if a in reg]
-        results = await asyncio.gather(*[_run_with_deadline(a, ctx) for a in runnable])
+        if deadlines is None:
+            results = await asyncio.gather(*[_run_with_deadline(a, ctx) for a in runnable])
+        else:
+            results = await asyncio.gather(
+                *[
+                    asyncio.wait_for(a.run(ctx), timeout=deadlines.get(a.name, 2.0))
+                    if a.name in deadlines
+                    else _run_with_deadline(a, ctx)
+                    for a in runnable
+                ],
+                return_exceptions=True,
+            )
+            # Coerce timeouts/errors to None so the downstream aggregate ignores them.
+            results = [r if hasattr(r, "agent") else None for r in results]
+
         parts = [r for r in results if r is not None]
 
         aggregate = _aggregate(self.name, parts)
@@ -159,9 +176,45 @@ class Manager:
             "task_id": str(task_id),
             "agents_used": [p.agent for p in parts] + [secure.name],
             "response": final.payload,
-            "citations": [c.__dict__ for c in final.citations],
+            "citations": [asdict(c) for c in final.citations],
             "ms_total": ms,
         }
+
+    async def chat(
+        self,
+        *,
+        query: str,
+        user_id: uuid.UUID | None,
+        role: str,
+    ) -> dict:
+        """Full DAG — Searcher / Shadow / Metodist as the intent dictates."""
+        plan = _detect_intent(query)
+        return await self._run(
+            query=query, user_id=user_id, role=role, plan=plan, deadlines=None
+        )
+
+    async def suggest(
+        self,
+        *,
+        query: str,
+        user_id: uuid.UUID | None,
+        role: str,
+    ) -> dict:
+        """Live preview Manager. Strips the slow Metodist (which can take
+        ~15 s on a cold Claude call) and tightens every remaining agent's
+        deadline to 2 s — Searcher's cached hits beat that comfortably.
+
+        Designed for the typing-as-you-go Recommendation preview: it
+        gives the operator a feel for what AI Manager would say without
+        burning Anthropic tokens on every keystroke."""
+        plan = _detect_intent(query) - {"AI Metodist"}
+        return await self._run(
+            query=query,
+            user_id=user_id,
+            role=role,
+            plan=plan,
+            deadlines={"AI Searcher": 2.0, "AI Shadow": 2.0},
+        )
 
 
 manager = Manager()

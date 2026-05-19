@@ -11,15 +11,34 @@ from __future__ import annotations
 import hashlib
 import re
 from dataclasses import dataclass
-
-import tiktoken
+from typing import Any
 
 _TARGET_MIN = 500
 _TARGET_MAX = 1000
 _OVERLAP_RATIO = 0.15
 
-_ENCODER = tiktoken.get_encoding("cl100k_base")
 _SENT_FALLBACK = re.compile(r"(?<=[.!?…])\s+(?=[A-ZА-ЯЎҚҒҲ])")
+
+# tiktoken encoders are lazy-loaded at first use so the platform can boot
+# in offline / air-gapped environments where the `cl100k_base` BPE blob
+# can't be downloaded from openaipublic.blob.core.windows.net. Falling
+# back to whitespace+punct tokenisation keeps the chunker honest about
+# size targets even without the official encoder.
+_encoder: Any | None = None
+_encoder_failed = False
+
+
+def _get_encoder() -> Any | None:
+    global _encoder, _encoder_failed
+    if _encoder is not None or _encoder_failed:
+        return _encoder
+    try:
+        import tiktoken
+
+        _encoder = tiktoken.get_encoding("cl100k_base")
+    except Exception:
+        _encoder_failed = True
+    return _encoder
 
 
 @dataclass(slots=True)
@@ -44,8 +63,17 @@ def _split_sentences(text: str) -> list[str]:
     return [s.strip() for s in _SENT_FALLBACK.split(text) if s.strip()]
 
 
+_FALLBACK_TOKEN_RE = re.compile(r"\w+|[^\w\s]", re.UNICODE)
+
+
 def _token_count(text: str) -> int:
-    return len(_ENCODER.encode(text))
+    enc = _get_encoder()
+    if enc is not None:
+        return len(enc.encode(text))
+    # Fallback: count alphanumeric runs + standalone punctuation. Roughly
+    # 0.75× a real BPE count for natural language, which keeps chunk
+    # boundaries within the same ballpark.
+    return len(_FALLBACK_TOKEN_RE.findall(text))
 
 
 def _hash(text: str) -> str:

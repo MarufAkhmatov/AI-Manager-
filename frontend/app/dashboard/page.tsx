@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { TopHeader } from "@/components/TopHeader";
 import { WorkflowCanvas } from "@/components/WorkflowCanvas";
 import type { ChatResponse } from "@/components/ChatPanel";
-import { api, openActivityWS } from "@/lib/api";
+import { ApiError, api, hasToken, openActivityWS } from "@/lib/api";
 
 interface ActivityEvent {
   agent: string;
@@ -27,6 +28,17 @@ const ALL_AGENT_NAMES = [
 ];
 
 export default function DashboardPage() {
+  const router = useRouter();
+
+  // Hard auth gate — bounce to /login if there's no token. The api helper
+  // also clears the token on 401 from the server, so a subsequent reload
+  // will land here.
+  useEffect(() => {
+    if (!hasToken()) {
+      router.replace("/login");
+    }
+  }, [router]);
+
   // ── Workflow / agent activity ──
   const [activeAgents, setActiveAgents] = useState<string[]>([]);
   const [recentByAgent, setRecentByAgent] = useState<Record<string, number>>({});
@@ -36,14 +48,14 @@ export default function DashboardPage() {
   const [draft, setDraft] = useState("");
   const [history, setHistory] = useState<string[]>([]);
   const [response, setResponse] = useState<ChatResponse | null>(null);
-  const [busy, setBusy] = useState(false);          // explicit send in flight
-  const [previewing, setPreviewing] = useState(false); // auto-suggest in flight
+  const [busy, setBusy] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
 
   const previewAbortRef = useRef<AbortController | null>(null);
 
-  // Live activity stream — keeps the chart pulsing for background work
-  // (Architect ingesting, Regulyator crawling, …).
+  // Live activity stream — keeps the chart pulsing for background work.
   useEffect(() => {
+    if (!hasToken()) return;
     const ws = openActivityWS();
     ws.onmessage = (msg) => {
       try {
@@ -71,8 +83,9 @@ export default function DashboardPage() {
     return () => clearInterval(t);
   }, [recentByAgent, demoUntil]);
 
-  // Auto-suggest: debounce the draft, fire a /api/chat call, and stash the
-  // response so RecommendationPanel renders a live preview.
+  // Auto-suggest: debounce the draft and hit /api/chat/suggest — a lighter
+  // Manager pass that skips Metodist's Claude call, so we don't burn
+  // tokens (or wait 15 s) on every keystroke.
   useEffect(() => {
     if (busy) return;
     const text = draft.trim();
@@ -82,7 +95,7 @@ export default function DashboardPage() {
       const ac = new AbortController();
       previewAbortRef.current = ac;
       setPreviewing(true);
-      api<ChatResponse>("/api/chat", {
+      api<ChatResponse>("/api/chat/suggest", {
         method: "POST",
         body: JSON.stringify({ message: text }),
         signal: ac.signal,
@@ -94,15 +107,19 @@ export default function DashboardPage() {
             Array.from(new Set([...prev, ...res.agents_used])),
           );
         })
-        .catch(() => {
-          /* preview errors are silent — the explicit send will surface them */
+        .catch((e) => {
+          if ((e as Error).name === "AbortError") return;
+          if (e instanceof ApiError && e.kind === "auth") {
+            router.replace("/login");
+          }
+          /* Other errors are silent on preview — the explicit send surfaces them. */
         })
         .finally(() => {
           if (!ac.signal.aborted) setPreviewing(false);
         });
     }, PREVIEW_DEBOUNCE_MS);
     return () => clearTimeout(t);
-  }, [draft, busy]);
+  }, [draft, busy, router]);
 
   async function handleSend() {
     const text = draft.trim();
@@ -121,10 +138,22 @@ export default function DashboardPage() {
         Array.from(new Set([...prev, ...res.agents_used])),
       );
     } catch (e) {
+      if (e instanceof ApiError && e.kind === "auth") {
+        router.replace("/login");
+        return;
+      }
+      const msg =
+        e instanceof ApiError
+          ? e.kind === "network"
+            ? "Backend bilan aloqa yo'q — server ishlayotganini tekshiring."
+            : e.kind === "server"
+              ? `Server xatosi (${e.status}). Iltimos qaytadan urinib ko'ring.`
+              : `${e.status}: ${e.message}`
+          : (e as Error).message;
       setResponse({
         task_id: "error",
         agents_used: [],
-        response: { agents: { error: { message: (e as Error).message } } },
+        response: { agents: { error: { message: msg } } },
         citations: [],
         ms_total: 0,
       });
