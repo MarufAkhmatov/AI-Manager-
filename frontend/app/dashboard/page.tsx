@@ -1,23 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { TopHeader } from "@/components/TopHeader";
 import { WorkflowCanvas } from "@/components/WorkflowCanvas";
-import { openActivityWS } from "@/lib/api";
+import type { ChatResponse } from "@/components/ChatPanel";
+import { api, openActivityWS } from "@/lib/api";
 
 interface ActivityEvent {
   agent: string;
   event: string;
 }
 
-// Agents that emitted an event in the last ACTIVE_WINDOW_MS pulse on the chart.
 const ACTIVE_WINDOW_MS = 4000;
-
-// Demo-mode lights every edge for a few seconds so the operator can see the
-// running visualisation without typing into the chat.
 const DEMO_MS = 4500;
+const PREVIEW_DEBOUNCE_MS = 700;
+const PREVIEW_MIN_CHARS = 3;
 
-const ALL_AGENTS = [
+const ALL_AGENT_NAMES = [
   "AI Manager",
   "AI Architect",
   "AI Metodist",
@@ -28,12 +27,22 @@ const ALL_AGENTS = [
 ];
 
 export default function DashboardPage() {
+  // ── Workflow / agent activity ──
   const [activeAgents, setActiveAgents] = useState<string[]>([]);
   const [recentByAgent, setRecentByAgent] = useState<Record<string, number>>({});
   const [demoUntil, setDemoUntil] = useState<number>(0);
 
-  // Real-time activity stream — keeps the canvas in sync with background
-  // work (Architect ingesting, Regulyator crawling, etc.).
+  // ── Chat state (lifted so RecommendationPanel can react to typing) ──
+  const [draft, setDraft] = useState("");
+  const [history, setHistory] = useState<string[]>([]);
+  const [response, setResponse] = useState<ChatResponse | null>(null);
+  const [busy, setBusy] = useState(false);          // explicit send in flight
+  const [previewing, setPreviewing] = useState(false); // auto-suggest in flight
+
+  const previewAbortRef = useRef<AbortController | null>(null);
+
+  // Live activity stream — keeps the chart pulsing for background work
+  // (Architect ingesting, Regulyator crawling, …).
   useEffect(() => {
     const ws = openActivityWS();
     ws.onmessage = (msg) => {
@@ -47,15 +56,14 @@ export default function DashboardPage() {
     return () => ws.close();
   }, []);
 
-  // Derive the active set every 800ms by combining the recency map, chat-
-  // triggered agents, and demo-mode override.
+  // Derive activeAgents from the recency map + demo override.
   useEffect(() => {
     const t = setInterval(() => {
       const now = Date.now();
       const recent = Object.entries(recentByAgent)
         .filter(([, ts]) => now - ts < ACTIVE_WINDOW_MS)
         .map(([name]) => name);
-      const demo = now < demoUntil ? ALL_AGENTS : [];
+      const demo = now < demoUntil ? ALL_AGENT_NAMES : [];
       setActiveAgents((prev) =>
         Array.from(new Set([...prev, ...recent, ...demo])),
       );
@@ -63,12 +71,73 @@ export default function DashboardPage() {
     return () => clearInterval(t);
   }, [recentByAgent, demoUntil]);
 
-  const isRunning = activeAgents.length > 0 || Date.now() < demoUntil;
+  // Auto-suggest: debounce the draft, fire a /api/chat call, and stash the
+  // response so RecommendationPanel renders a live preview.
+  useEffect(() => {
+    if (busy) return;
+    const text = draft.trim();
+    if (text.length < PREVIEW_MIN_CHARS) return;
+    const t = setTimeout(() => {
+      previewAbortRef.current?.abort();
+      const ac = new AbortController();
+      previewAbortRef.current = ac;
+      setPreviewing(true);
+      api<ChatResponse>("/api/chat", {
+        method: "POST",
+        body: JSON.stringify({ message: text }),
+        signal: ac.signal,
+      })
+        .then((res) => {
+          if (ac.signal.aborted) return;
+          setResponse(res);
+          setActiveAgents((prev) =>
+            Array.from(new Set([...prev, ...res.agents_used])),
+          );
+        })
+        .catch(() => {
+          /* preview errors are silent — the explicit send will surface them */
+        })
+        .finally(() => {
+          if (!ac.signal.aborted) setPreviewing(false);
+        });
+    }, PREVIEW_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [draft, busy]);
+
+  async function handleSend() {
+    const text = draft.trim();
+    if (!text || busy) return;
+    previewAbortRef.current?.abort();
+    setBusy(true);
+    setHistory((prev) => [...prev, text]);
+    setDraft("");
+    try {
+      const res = await api<ChatResponse>("/api/chat", {
+        method: "POST",
+        body: JSON.stringify({ message: text }),
+      });
+      setResponse(res);
+      setActiveAgents((prev) =>
+        Array.from(new Set([...prev, ...res.agents_used])),
+      );
+    } catch (e) {
+      setResponse({
+        task_id: "error",
+        agents_used: [],
+        response: { agents: { error: { message: (e as Error).message } } },
+        citations: [],
+        ms_total: 0,
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const isRunning =
+    busy || previewing || activeAgents.length > 0 || Date.now() < demoUntil;
 
   function handleRun() {
-    if (isRunning) {
-      // stop demo immediately and clear chat-active set; live WS events keep
-      // their own recency, so they'll drop out naturally inside 4s.
+    if (Date.now() < demoUntil) {
       setDemoUntil(0);
       setActiveAgents([]);
     } else {
@@ -87,7 +156,13 @@ export default function DashboardPage() {
         <WorkflowCanvas
           isRunning={isRunning}
           activeAgents={activeAgents}
-          onAgentsActive={setActiveAgents}
+          draft={draft}
+          onDraftChange={setDraft}
+          history={history}
+          onSend={handleSend}
+          busy={busy}
+          previewing={previewing}
+          response={response}
         />
       </div>
     </main>

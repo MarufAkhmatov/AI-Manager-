@@ -1,73 +1,82 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AgentNode } from "@/components/AgentNode";
 import { ChatPanel, type ChatResponse } from "@/components/ChatPanel";
+import { RecommendationPanel } from "@/components/RecommendationPanel";
+import { DraggableLayer } from "@/components/DraggableLayer";
 import type { AgentSlug } from "@/components/avatars";
 
 // ────────────────────────────────────────────────────────────────────
-// Layout
+// Sizing
 // ────────────────────────────────────────────────────────────────────
 const MANAGER_SIZE = 132;
-const SUB_SIZE = 92;
-const RADIUS = 280; // manager-centre to sub-agent-centre
-const CHAT_W = 340;
-const CHAT_H = 400;
+const SUB_SIZE = 88;
+const CHAT_W = 460;
+const CHAT_H = 340;
+const CHAT_W_EXPANDED = 720;
+const CHAT_H_EXPANDED = 560;
 
-// Order around the circle, starting at -90° (top) clockwise so the operator
-// reads it like a clock face.
-const SUBS: Array<{ slug: AgentSlug; name: string; angle: number }> = [
-  { slug: "architect",  name: "AI Architect",  angle: -90 },
-  { slug: "metodist",   name: "AI Metodist",   angle: -30 },
-  { slug: "searcher",   name: "AI Searcher",   angle: 30 },
-  { slug: "shadow",     name: "AI Shadow",     angle: 90 },
-  { slug: "regulyator", name: "AI Regulyator", angle: 150 },
-  { slug: "secure",     name: "AI Secure",     angle: 210 },
+// Order across the horizontal row, left → right.
+const SUBS: Array<{ slug: AgentSlug; name: string }> = [
+  { slug: "architect",  name: "AI Architect" },
+  { slug: "metodist",   name: "AI Metodist" },
+  { slug: "searcher",   name: "AI Searcher" },
+  { slug: "shadow",     name: "AI Shadow" },
+  { slug: "regulyator", name: "AI Regulyator" },
+  { slug: "secure",     name: "AI Secure" },
 ];
 
 interface Pos { x: number; y: number }
 
-function radial(cx: number, cy: number, angleDeg: number, r: number): Pos {
-  const rad = (angleDeg * Math.PI) / 180;
-  return { x: cx + Math.cos(rad) * r, y: cy + Math.sin(rad) * r };
-}
-
 function initialPositions(w: number, h: number): Record<string, Pos> {
-  // Manager sits slightly above the canvas centre so the chat panel can live
-  // in the lower-left without overlapping the radial cluster.
   const cx = w / 2;
-  const cy = Math.max(h / 2 - 40, 280);
 
-  const positions: Record<string, Pos> = {
-    // top-left of the manager card
-    manager: { x: cx - MANAGER_SIZE / 2, y: cy - MANAGER_SIZE / 2 },
-    // chat lives bottom-left
-    chat: { x: 32, y: h - CHAT_H - 32 },
-  };
-  for (const s of SUBS) {
-    const c = radial(cx, cy, s.angle, RADIUS);
-    positions[s.slug] = { x: c.x - SUB_SIZE / 2, y: c.y - SUB_SIZE / 2 };
+  // Manager: top centre, ~64 px below the canvas top so the name label fits.
+  const manager: Pos = { x: cx - MANAGER_SIZE / 2, y: 64 };
+
+  // Sub-agents: horizontal row, evenly spaced, centred.
+  // Reserve ~120 px between centres so the names don't collide.
+  const subGap = 132;
+  const subRowWidth = (SUBS.length - 1) * subGap;
+  const subStartX = cx - subRowWidth / 2;
+  const subY = 260;
+  const subs: Record<string, Pos> = {};
+  for (let i = 0; i < SUBS.length; i++) {
+    subs[SUBS[i].slug] = {
+      x: subStartX + i * subGap - SUB_SIZE / 2,
+      y: subY,
+    };
   }
-  return positions;
+
+  // Chat + Recommendation: side-by-side, anchored to bottom of canvas.
+  const chatY = Math.max(h - CHAT_H - 32, subY + 180);
+  const totalChatWidth = CHAT_W * 2 + 24;
+  const chatStartX = cx - totalChatWidth / 2;
+
+  return {
+    manager,
+    ...subs,
+    chat: { x: chatStartX, y: chatY },
+    rec:  { x: chatStartX + CHAT_W + 24, y: chatY },
+  };
 }
 
 // Centre of a node, used as the connector endpoint.
 function nodeCentre(id: string, p: Pos): Pos {
-  if (id === "manager") return { x: p.x + MANAGER_SIZE / 2, y: p.y + MANAGER_SIZE / 2 };
-  if (id === "chat")    return { x: p.x + CHAT_W / 2,        y: p.y };
+  if (id === "manager") {
+    return { x: p.x + MANAGER_SIZE / 2, y: p.y + MANAGER_SIZE / 2 };
+  }
   return { x: p.x + SUB_SIZE / 2, y: p.y + SUB_SIZE / 2 };
 }
 
-// Smooth bezier between two centres, biased so the curve flows out along the
-// line to the destination — gives the connectors a clean organic shape
-// instead of straight lines.
-function bezier(a: Pos, b: Pos): string {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const cp1 = { x: a.x + dx * 0.35, y: a.y + dy * 0.05 };
-  const cp2 = { x: b.x - dx * 0.35, y: b.y - dy * 0.05 };
-  return `M ${a.x} ${a.y} C ${cp1.x} ${cp1.y}, ${cp2.x} ${cp2.y}, ${b.x} ${b.y}`;
+// Manager bottom port → sub-agent top port. Vertical-biased S-curve so the
+// edges fan cleanly to each sub-agent regardless of horizontal offset.
+function fanBezier(from: Pos, to: Pos): string {
+  const dy = Math.max(to.y - from.y, 40);
+  const cp1 = { x: from.x, y: from.y + dy * 0.55 };
+  const cp2 = { x: to.x,   y: to.y - dy * 0.55 };
+  return `M ${from.x} ${from.y} C ${cp1.x} ${cp1.y}, ${cp2.x} ${cp2.y}, ${to.x} ${to.y}`;
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -75,25 +84,38 @@ function bezier(a: Pos, b: Pos): string {
 interface Props {
   isRunning: boolean;
   activeAgents: string[];
-  onAgentsActive(agents: string[]): void;
-  onResponse?(r: ChatResponse): void;
+
+  // Chat state lifted into the dashboard so RecommendationPanel can react
+  // to typing live.
+  draft: string;
+  onDraftChange(v: string): void;
+  history: string[];
+  onSend(): void;
+  busy: boolean;
+  previewing: boolean;
+  response: ChatResponse | null;
 }
 
 export function WorkflowCanvas({
   isRunning,
   activeAgents,
-  onAgentsActive,
-  onResponse,
+  draft,
+  onDraftChange,
+  history,
+  onSend,
+  busy,
+  previewing,
+  response,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState<{ w: number; h: number }>({ w: 1280, h: 720 });
+  const [size, setSize] = useState<{ w: number; h: number }>({ w: 1400, h: 820 });
   const [initialized, setInitialized] = useState(false);
   const [positions, setPositions] = useState<Record<string, Pos>>(() =>
-    initialPositions(1280, 720),
+    initialPositions(1400, 820),
   );
+  const [chatExpanded, setChatExpanded] = useState(false);
+  const [recExpanded, setRecExpanded] = useState(false);
 
-  // Track container size so positions re-centre on first mount and after
-  // a viewport resize (only when nodes haven't been dragged yet).
   useEffect(() => {
     function measure() {
       if (!containerRef.current) return;
@@ -114,11 +136,8 @@ export function WorkflowCanvas({
 
   const activeSet = useMemo(() => new Set(activeAgents), [activeAgents]);
 
-  function handleDrag(id: string, delta: { x: number; y: number }) {
-    setPositions((prev) => ({
-      ...prev,
-      [id]: { x: prev[id].x + delta.x, y: prev[id].y + delta.y },
-    }));
+  function move(id: string, p: Pos) {
+    setPositions((prev) => ({ ...prev, [id]: p }));
   }
 
   const managerCentre = nodeCentre("manager", positions.manager);
@@ -135,22 +154,27 @@ export function WorkflowCanvas({
             <feGaussianBlur stdDeviation="4" result="blur" />
             <feComposite in="SourceGraphic" in2="blur" operator="over" />
           </filter>
-          <filter id="amber-glow" x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur stdDeviation="5" result="blur" />
-            <feComposite in="SourceGraphic" in2="blur" operator="over" />
-          </filter>
         </defs>
 
-        {/* Manager ↔ each sub-agent */}
         {SUBS.map((s) => {
           const subCentre = nodeCentre(s.slug, positions[s.slug]);
-          const path = bezier(managerCentre, subCentre);
+          // Manager's bottom edge → sub-agent's top edge.
+          const fromPort = {
+            x: managerCentre.x,
+            y: positions.manager.y + MANAGER_SIZE,
+          };
+          const toPort = {
+            x: subCentre.x,
+            y: positions[s.slug].y,
+          };
+          const path = fanBezier(fromPort, toPort);
           const on = activeSet.has(s.name);
           const stroke = on
             ? "#22ff88"
             : isRunning
               ? "rgba(34, 255, 136, 0.25)"
               : "rgba(255, 255, 255, 0.10)";
+
           return (
             <g key={`edge-${s.slug}`}>
               <path
@@ -169,47 +193,14 @@ export function WorkflowCanvas({
             </g>
           );
         })}
-
-        {/* Chat → Manager input edge */}
-        {(() => {
-          const chatCentre = nodeCentre("chat", positions.chat);
-          const path = bezier(chatCentre, managerCentre);
-          return (
-            <g>
-              <path
-                d={path}
-                fill="none"
-                stroke={
-                  isRunning
-                    ? "#22ff88"
-                    : "rgba(255, 255, 255, 0.10)"
-                }
-                strokeWidth={isRunning ? 2.4 : 1.6}
-                strokeDasharray={isRunning ? undefined : "5 5"}
-                filter={isRunning ? "url(#neon-glow)" : undefined}
-                className="transition-all duration-500 ease-in-out"
-              />
-              {isRunning && (
-                <circle r="4" fill="#22ff88" filter="url(#neon-glow)">
-                  <animateMotion dur="1.8s" repeatCount="indefinite" path={path} />
-                </circle>
-              )}
-            </g>
-          );
-        })()}
       </svg>
 
-      {/* ───── Nodes ───── */}
-
-      {/* Manager */}
-      <motion.div
-        drag
-        dragMomentum={false}
-        dragConstraints={containerRef}
-        onDrag={(_e, info) => handleDrag("manager", info.delta)}
-        initial={false}
-        animate={{ x: positions.manager.x, y: positions.manager.y }}
-        className="absolute left-0 top-0 z-20 cursor-grab active:cursor-grabbing"
+      {/* ───── Manager ───── */}
+      <DraggableLayer
+        position={positions.manager}
+        onChange={(p) => move("manager", p)}
+        zIndex={20}
+        className="cursor-grab active:cursor-grabbing"
       >
         <AgentNode
           slug="manager"
@@ -219,19 +210,16 @@ export function WorkflowCanvas({
           size={MANAGER_SIZE}
           asLink={false}
         />
-      </motion.div>
+      </DraggableLayer>
 
-      {/* Sub-agents */}
+      {/* ───── Sub-agents ───── */}
       {SUBS.map((s) => (
-        <motion.div
+        <DraggableLayer
           key={s.slug}
-          drag
-          dragMomentum={false}
-          dragConstraints={containerRef}
-          onDrag={(_e, info) => handleDrag(s.slug, info.delta)}
-          initial={false}
-          animate={{ x: positions[s.slug].x, y: positions[s.slug].y }}
-          className="absolute left-0 top-0 z-10 cursor-grab active:cursor-grabbing"
+          position={positions[s.slug]}
+          onChange={(p) => move(s.slug, p)}
+          zIndex={10}
+          className="cursor-grab active:cursor-grabbing"
         >
           <AgentNode
             slug={s.slug}
@@ -241,27 +229,50 @@ export function WorkflowCanvas({
             size={SUB_SIZE}
             asLink={false}
           />
-        </motion.div>
+        </DraggableLayer>
       ))}
 
-      {/* Chat panel — draggable. Clicks inside the input still focus/type
-          because framer-motion only initiates drag on pointermove, not on a
-          simple click-and-release. */}
-      <motion.div
-        drag
-        dragMomentum={false}
-        dragConstraints={containerRef}
-        onDrag={(_e, info) => handleDrag("chat", info.delta)}
-        initial={false}
-        animate={{ x: positions.chat.x, y: positions.chat.y }}
-        className="absolute left-0 top-0 z-30"
-        style={{ width: CHAT_W }}
+      {/* ───── Chat (left) ───── */}
+      <DraggableLayer
+        position={positions.chat}
+        onChange={(p) => move("chat", p)}
+        dragHandle='[data-drag-handle="true"]'
+        zIndex={30}
+        style={{
+          width: chatExpanded ? CHAT_W_EXPANDED : CHAT_W,
+          height: chatExpanded ? CHAT_H_EXPANDED : CHAT_H,
+        }}
       >
         <ChatPanel
-          onAgentsActive={onAgentsActive}
-          onResponse={onResponse}
+          draft={draft}
+          onDraftChange={onDraftChange}
+          history={history}
+          onSend={onSend}
+          busy={busy}
+          expanded={chatExpanded}
+          onToggleExpand={() => setChatExpanded((v) => !v)}
         />
-      </motion.div>
+      </DraggableLayer>
+
+      {/* ───── Recommendation (right) ───── */}
+      <DraggableLayer
+        position={positions.rec}
+        onChange={(p) => move("rec", p)}
+        dragHandle='[data-drag-handle="true"]'
+        zIndex={30}
+        style={{
+          width: recExpanded ? CHAT_W_EXPANDED : CHAT_W,
+          height: recExpanded ? CHAT_H_EXPANDED : CHAT_H,
+        }}
+      >
+        <RecommendationPanel
+          response={response}
+          previewing={previewing}
+          busy={busy}
+          expanded={recExpanded}
+          onToggleExpand={() => setRecExpanded((v) => !v)}
+        />
+      </DraggableLayer>
     </div>
   );
 }
