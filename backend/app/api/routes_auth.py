@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from app.config import get_settings
 from app.db.models import User
 from app.db.session import session_scope
 from app.deps import AuthUser, current_user
@@ -29,6 +32,36 @@ class LoginOut(BaseModel):
 
 @router.post("/login", response_model=LoginOut)
 async def login(body: LoginIn) -> LoginOut:
+    settings = get_settings()
+
+    # Demo mode: no database, no password store. The only working account
+    # is `admin` (any non-empty password). This branch never touches
+    # session_scope, so it works without Postgres.
+    if settings.aim_demo:
+        if body.username != "admin":
+            await audit(
+                "auth.login.failed",
+                username=body.username,
+                reason="demo_only_admin",
+            )
+            raise HTTPException(
+                status.HTTP_401_UNAUTHORIZED,
+                detail="demo mode accepts only username 'admin' (any password)",
+            )
+        demo_id = uuid.UUID("00000000-0000-0000-0000-000000000001")
+        await audit(
+            "auth.login.ok",
+            user_id=str(demo_id),
+            username="admin",
+            role="admin",
+            demo=True,
+        )
+        token = issue_token(user_id=demo_id, username="admin", role="admin")
+        return LoginOut(
+            access_token=token,
+            user={"id": str(demo_id), "username": "admin", "role": "admin"},
+        )
+
     async with session_scope() as session:
         user = await session.scalar(select(User).where(User.username == body.username))
     if user is None or user.disabled_at is not None:

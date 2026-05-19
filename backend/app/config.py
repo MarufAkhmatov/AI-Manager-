@@ -53,6 +53,17 @@ class Settings(BaseSettings):
 
     tesseract_langs: str = "rus+uzb+uzb_cyrl+eng"
 
+    # Demo / no-deps mode -----------------------------------------------------
+    # When AIM_DEMO=1 the backend boots without Postgres / Redis / Ollama /
+    # the standalone Metodist agent:
+    #   * Manager uses stub Searcher / Metodist / Shadow that return canned
+    #     responses so the chat panel and recommendation flow are usable.
+    #   * /api/auth/login accepts any password for username "admin".
+    #   * Architect filesystem watcher + Regulyator scheduler don't boot.
+    # The full agent contracts (Secure egress, Shadow-guard, citations
+    # shape) are preserved so the UI looks and behaves identically.
+    aim_demo: bool = False
+
     # Derived KB sub-paths -----------------------------------------------------
     @property
     def kb(self) -> Path:

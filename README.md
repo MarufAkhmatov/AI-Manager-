@@ -20,7 +20,35 @@ Seven agents collaborate behind a FastAPI backend and a Next.js 14 UI:
 
 The long-form architecture lives in [`docs/DESIGN.md`](docs/DESIGN.md).
 
-## Quick start (operator)
+## Quick start — demo mode (no Docker, ~2 minutes)
+
+If you just want to see the dashboard talk to the backend on your laptop
+without setting up Postgres / Redis / Ollama, run the demo launcher.
+It boots:
+
+* **FastAPI** with `AIM_DEMO=1` — stub Searcher / Metodist / Shadow that
+  return canned responses (the AI Secure egress + Shadow-guard contracts
+  are kept intact); login as `admin` with any password.
+* **Next.js** dev server pointed at the local backend.
+
+```powershell
+# Windows (PowerShell, from the repo root)
+.\scripts\start_demo.ps1
+```
+
+```bash
+# Linux / macOS, from the repo root
+./scripts/start_demo.sh
+```
+
+Open <http://localhost:3000/dashboard> and sign in as **admin / anything**.
+Chat → Recommendation auto-suggest is live; the workflow canvas pulses
+in real time when agents fire.
+
+To switch to the real stack later, just drop `AIM_DEMO` and follow the
+Docker quick-start below.
+
+## Quick start (operator) — full stack with Docker
 
 Prereqs: Windows 10/11 with Docker Desktop, Python 3.11 if you want to
 run the seed and verifier scripts directly.

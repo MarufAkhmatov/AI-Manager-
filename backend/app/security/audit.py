@@ -43,19 +43,34 @@ def _last_hash(path: Path) -> str:
 
 
 async def record(event: str, **fields: Any) -> None:
-    """Append a structured event. Safe under concurrent callers (asyncio lock)."""
-    path = _path()
+    """Append a structured event. Safe under concurrent callers (asyncio lock).
+
+    Best-effort: if AIM_ROOT isn't writable (typical in demo mode where the
+    operator hasn't set up `C:\\Users\\ASUS\\Desktop\\AI Manager` yet) we
+    silently skip the append rather than crash the request. Real deployments
+    must have the path writable; the audit chain still verifies whatever
+    lines were actually written.
+    """
+    try:
+        path = _path()
+    except (OSError, PermissionError):
+        return
     async with _lock:
-        prev = _last_hash(path)
-        entry = {
-            "ts": datetime.now(timezone.utc).isoformat(),
-            "event": event,
-            "prev": prev,
-            **fields,
-        }
-        line = json.dumps(entry, ensure_ascii=False, sort_keys=True)
-        with path.open("a", encoding="utf-8") as f:
-            f.write(line + "\n")
+        try:
+            prev = _last_hash(path)
+            entry = {
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "event": event,
+                "prev": prev,
+                **fields,
+            }
+            line = json.dumps(entry, ensure_ascii=False, sort_keys=True)
+            with path.open("a", encoding="utf-8") as f:
+                f.write(line + "\n")
+        except (OSError, PermissionError):
+            # Filesystem issue (read-only mount, disk full, ACL denial).
+            # Don't propagate — auth + admin endpoints must keep responding.
+            return
 
 
 def verify(path: Path | None = None) -> tuple[bool, int, str | None]:

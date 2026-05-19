@@ -28,6 +28,7 @@ from typing import Iterable
 from app.agents.base import Agent, AgentContext, AgentResult, Citation
 from app.agents.searcher import searcher
 from app.agents.secure import secure
+from app.config import get_settings
 from app.events import emit
 
 # Per-agent soft deadlines. Anything not listed gets `DEFAULT_DEADLINE_S`.
@@ -75,6 +76,14 @@ def _detect_intent(q: str) -> set[str]:
 
 
 def _registry() -> dict[str, Agent]:
+    # Demo / no-deps mode: skip the real agents (which need Postgres +
+    # Ollama + the standalone Metodist) and use the stubs instead. The
+    # Secure egress is still wired up in `_run` so contracts hold.
+    if get_settings().aim_demo:
+        from app.agents.demo_stubs import demo_registry
+
+        return demo_registry()
+
     # Lazy import to keep the optional Phase 4 agents out of Phase 3 dep graph.
     reg: dict[str, Agent] = {"AI Searcher": searcher}
     try:

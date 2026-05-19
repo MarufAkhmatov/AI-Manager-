@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.agents.architect import architect
 from app.agents.regulyator import regulyator
 from app.api import routes_agents, routes_auth, routes_chat, routes_kb, ws_hub
+from app.config import get_settings
 from app.events import emit
 
 
@@ -35,14 +36,17 @@ async def _prewarm_metodist() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await architect.boot()
-    asyncio.create_task(_prewarm_metodist())
-    regulyator.schedule()
+    settings = get_settings()
+    if not settings.aim_demo:
+        await architect.boot()
+        asyncio.create_task(_prewarm_metodist())
+        regulyator.schedule()
     try:
         yield
     finally:
-        regulyator.shutdown()
-        await architect.shutdown()
+        if not settings.aim_demo:
+            regulyator.shutdown()
+            await architect.shutdown()
 
 
 app = FastAPI(title="AI Manager Platform", version="0.1.0", lifespan=lifespan)
