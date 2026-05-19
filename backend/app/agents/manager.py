@@ -26,6 +26,7 @@ from dataclasses import asdict
 from typing import Iterable
 
 from app.agents.base import Agent, AgentContext, AgentResult, Citation
+from app.agents.cases import build_case_analysis
 from app.agents.searcher import searcher
 from app.agents.secure import secure
 from app.config import get_settings
@@ -181,11 +182,17 @@ class Manager:
         ms = int((time.perf_counter() - start) * 1000)
         await emit(self.name, "done", task_id=str(task_id), ms_total=ms)
 
+        # Structured case analysis — the Recommendation panel's preferred
+        # render path. Built from the masked aggregate so confidential ids
+        # / titles are already stripped before they hit the schema.
+        case = build_case_analysis(final).to_dict()
+
         return {
             "task_id": str(task_id),
             "agents_used": [p.agent for p in parts] + [secure.name],
             "response": final.payload,
             "citations": [asdict(c) for c in final.citations],
+            "case_analysis": case,
             "ms_total": ms,
         }
 

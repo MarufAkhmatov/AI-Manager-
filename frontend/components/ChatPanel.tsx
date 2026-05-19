@@ -3,6 +3,36 @@
 import { Maximize2, Minimize2, Plus, Send } from "lucide-react";
 import { AgentAvatar } from "@/components/AgentAvatar";
 
+export interface CaseAnalysis {
+  summary: string;
+  affected_internal: Array<{
+    document_id: string | null;
+    title: string | null;
+    snippet: string;
+    score: number;
+    section: string | null;
+    department: string | null;
+  }>;
+  external_basis: Array<{
+    authority: string | null;
+    source_url: string | null;
+    title: string | null;
+    snippet: string;
+  }>;
+  conflicts: Array<{
+    internal_ref: string;
+    external_ref: string;
+    why: string;
+  }>;
+  recommendations: Array<{
+    action: string;
+    target_doc: string | null;
+    target_clause: string | null;
+    suggested_text: string;
+  }>;
+  affected_departments: string[];
+}
+
 export interface ChatResponse {
   task_id: string;
   agents_used: string[];
@@ -13,6 +43,7 @@ export interface ChatResponse {
     snippet: string;
     score: number;
   }>;
+  case_analysis?: CaseAnalysis;
   ms_total: number;
 }
 

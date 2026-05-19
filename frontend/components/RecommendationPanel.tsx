@@ -1,9 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, FileText, Loader2, Maximize2, Minimize2 } from "lucide-react";
+import {
+  Building2,
+  Check,
+  ChevronDown,
+  Copy,
+  ExternalLink,
+  FileText,
+  GitCompare,
+  Lightbulb,
+  Loader2,
+  Maximize2,
+  Minimize2,
+  ScrollText,
+} from "lucide-react";
 import { AvatarStack } from "@/components/AvatarStack";
-import type { ChatResponse } from "@/components/ChatPanel";
+import type { CaseAnalysis, ChatResponse } from "@/components/ChatPanel";
 import type { AgentSlug } from "@/components/avatars";
 
 const ALL_AGENTS: Array<{ slug: AgentSlug; name: string }> = [
@@ -24,10 +37,10 @@ interface Props {
   onToggleExpand(): void;
 }
 
-// Read-only output panel — copy + Word + maximise controls. The avatar
-// strip sits ABOVE the panel section so that the section itself stays the
-// exact same height as the chat panel's section (perfect top/bottom
-// symmetry across the two panels).
+// Read-only output panel — copy + Word + maximise. When the backend ships
+// a `case_analysis` field on the response, we render structured sections
+// (summary, affected internal docs, external basis, conflicts,
+// recommendations, departments) instead of the raw JSON dump.
 export function RecommendationPanel({
   response,
   previewing,
@@ -39,6 +52,7 @@ export function RecommendationPanel({
   const text = response ? renderText(response) : "";
   const usedAgents = new Set(response?.agents_used ?? []);
   const items = ALL_AGENTS.map((a) => ({ ...a, active: usedAgents.has(a.name) }));
+  const ca = response?.case_analysis ?? null;
 
   async function handleCopy() {
     if (!text) return;
@@ -75,8 +89,6 @@ ${response ? `<hr><p style="font-size: 9pt; color: #555;">Agents: ${response.age
 
   return (
     <div className="flex h-full flex-col">
-      {/* Avatar strip — drag handle. Fixed height (~32px) so the panel
-          section below it remains symmetric with the chat panel section. */}
       <div
         data-drag-handle="true"
         className="flex h-8 cursor-grab items-center gap-2 px-3 active:cursor-grabbing select-none"
@@ -88,7 +100,6 @@ ${response ? `<hr><p style="font-size: 9pt; color: #555;">Agents: ${response.age
       </div>
 
       <section className="relative flex flex-1 flex-col overflow-hidden rounded-2xl border border-line bg-black/40 shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-xl">
-        {/* Header — drag handle + title + actions */}
         <header
           data-drag-handle="true"
           className="flex cursor-grab items-center justify-between border-b border-line bg-white/[0.02] px-4 py-2.5 active:cursor-grabbing select-none"
@@ -128,27 +139,256 @@ ${response ? `<hr><p style="font-size: 9pt; color: #555;">Agents: ${response.age
           </div>
         </header>
 
-        {/* Body — read-only output */}
         <div className="relative flex-1 overflow-y-auto px-4 py-3 scrollbar-thin">
           {!response ? (
-            <div className="grid h-full place-items-center text-center text-xs text-white/35">
-              {previewing
-                ? "AI Manager javobni tayyorlayapti…"
-                : "AI Manager chatga savol yozing — javob bu yerda avtomatik chiqadi."}
-            </div>
+            <Empty previewing={previewing} />
+          ) : ca ? (
+            <StructuredCase ca={ca} response={response} />
           ) : (
-            <>
-              <pre className="whitespace-pre-wrap select-text font-sans text-sm leading-relaxed text-white/90">
-                {text}
-              </pre>
-              <div className="mt-3 border-t border-line pt-2 text-[10px] text-white/35">
-                {response.agents_used.join(" · ")} · {response.ms_total}ms
-              </div>
-            </>
+            <RawDump response={response} text={text} />
           )}
         </div>
       </section>
     </div>
+  );
+}
+
+// ───────────────────────── Empty + raw fallback ─────────────────────────
+
+function Empty({ previewing }: { previewing: boolean }) {
+  return (
+    <div className="grid h-full place-items-center text-center text-xs text-white/35">
+      {previewing
+        ? "AI Manager javobni tayyorlayapti…"
+        : "AI Manager chatga savol yozing — javob bu yerda avtomatik chiqadi."}
+    </div>
+  );
+}
+
+function RawDump({ response, text }: { response: ChatResponse; text: string }) {
+  return (
+    <>
+      <pre className="whitespace-pre-wrap select-text font-sans text-sm leading-relaxed text-white/90">
+        {text}
+      </pre>
+      <div className="mt-3 border-t border-line pt-2 text-[10px] text-white/35">
+        {response.agents_used.join(" · ")} · {response.ms_total}ms
+      </div>
+    </>
+  );
+}
+
+// ───────────────────────── Structured sections ──────────────────────────
+
+function StructuredCase({
+  ca,
+  response,
+}: {
+  ca: CaseAnalysis;
+  response: ChatResponse;
+}) {
+  const hasInternal = ca.affected_internal.length > 0;
+  const hasExternal = ca.external_basis.length > 0;
+  const hasConflicts = ca.conflicts.length > 0;
+  const hasRecs = ca.recommendations.length > 0;
+  const hasDepts = ca.affected_departments.length > 0;
+
+  return (
+    <div className="space-y-4">
+      {ca.summary && (
+        <p className="select-text whitespace-pre-wrap text-sm leading-relaxed text-white/90">
+          {ca.summary}
+        </p>
+      )}
+
+      {hasDepts && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Building2 size={12} className="text-white/40" />
+          {ca.affected_departments.map((d) => (
+            <span
+              key={d}
+              className="rounded-full border border-neon/30 bg-neon-soft px-2 py-[2px] text-[10px] font-medium uppercase tracking-wider text-neon"
+            >
+              {d}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <Section
+        title="Affected internal documents"
+        icon={ScrollText}
+        count={ca.affected_internal.length}
+        defaultOpen={hasInternal}
+        empty="No internal docs identified."
+      >
+        <ul className="space-y-1.5">
+          {ca.affected_internal.map((it, i) => (
+            <li
+              key={i}
+              className="rounded-lg border border-line bg-white/[0.02] px-3 py-2 text-xs"
+            >
+              <div className="flex items-center justify-between">
+                <span className="truncate text-white/85">
+                  {it.title ?? "(redacted)"}
+                </span>
+                <span className="ml-2 shrink-0 text-[10px] text-white/40">
+                  {it.score.toFixed(2)}
+                </span>
+              </div>
+              <p className="mt-1 line-clamp-3 text-[11px] text-white/55">
+                {it.snippet}
+              </p>
+              {(it.section || it.department) && (
+                <div className="mt-1 flex gap-2 text-[10px] text-white/40">
+                  {it.section && <span>§ {it.section}</span>}
+                  {it.department && <span>· {it.department}</span>}
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      </Section>
+
+      <Section
+        title="External basis"
+        icon={ExternalLink}
+        count={ca.external_basis.length}
+        defaultOpen={hasExternal}
+        empty="No external acts cited."
+      >
+        <ul className="space-y-1.5">
+          {ca.external_basis.map((ex, i) => (
+            <li
+              key={i}
+              className="rounded-lg border border-line bg-white/[0.02] px-3 py-2 text-xs"
+            >
+              <div className="flex items-center justify-between">
+                <span className="truncate text-white/85">
+                  {ex.title ?? ex.authority ?? "external act"}
+                </span>
+                {ex.authority && (
+                  <span className="ml-2 shrink-0 rounded-full bg-white/5 px-1.5 py-[1px] text-[9px] uppercase text-white/55">
+                    {ex.authority}
+                  </span>
+                )}
+              </div>
+              {ex.source_url && (
+                <a
+                  href={ex.source_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 block truncate text-[10px] text-neon/70 hover:text-neon hover:underline"
+                >
+                  {ex.source_url}
+                </a>
+              )}
+              <p className="mt-1 line-clamp-3 text-[11px] text-white/55">
+                {ex.snippet}
+              </p>
+            </li>
+          ))}
+        </ul>
+      </Section>
+
+      <Section
+        title="Conflicts"
+        icon={GitCompare}
+        count={ca.conflicts.length}
+        defaultOpen={hasConflicts}
+        empty="Hech qanday konflikt aniqlanmadi (yoki Metodist hali strukturalashgan diff bermayapti)."
+      >
+        <ul className="space-y-1.5">
+          {ca.conflicts.map((c, i) => (
+            <li
+              key={i}
+              className="rounded-lg border border-amber/30 bg-amber-soft px-3 py-2 text-xs"
+            >
+              <div className="text-[10px] font-medium uppercase tracking-wider text-amber">
+                {c.internal_ref} ⇄ {c.external_ref}
+              </div>
+              <p className="mt-1 text-white/85">{c.why}</p>
+            </li>
+          ))}
+        </ul>
+      </Section>
+
+      <Section
+        title="Recommendations"
+        icon={Lightbulb}
+        count={ca.recommendations.length}
+        defaultOpen={hasRecs}
+        empty="Hech qanday tavsiya yo'q (Metodist strukturalashgan tavsiya bermagan)."
+      >
+        <ul className="space-y-1.5">
+          {ca.recommendations.map((r, i) => (
+            <li
+              key={i}
+              className="rounded-lg border border-neon/30 bg-neon-soft px-3 py-2 text-xs"
+            >
+              <div className="text-[10px] font-medium uppercase tracking-wider text-neon">
+                {r.action}
+                {r.target_doc && <span className="ml-2 text-white/55">{r.target_doc}</span>}
+                {r.target_clause && <span className="text-white/40"> § {r.target_clause}</span>}
+              </div>
+              <p className="mt-1 text-white/85">{r.suggested_text}</p>
+            </li>
+          ))}
+        </ul>
+      </Section>
+
+      <div className="border-t border-line pt-2 text-[10px] text-white/35">
+        {response.agents_used.join(" · ")} · {response.ms_total}ms
+      </div>
+    </div>
+  );
+}
+
+// ───────────────────────── Section helper ───────────────────────────────
+
+function Section({
+  title,
+  icon: Icon,
+  count,
+  defaultOpen,
+  empty,
+  children,
+}: {
+  title: string;
+  icon: typeof Building2;
+  count: number;
+  defaultOpen: boolean;
+  empty: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <section>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between rounded-md px-1 py-1 text-left text-[10px] uppercase tracking-[0.18em] text-white/45 transition hover:bg-white/[0.02] hover:text-white/70"
+      >
+        <span className="flex items-center gap-1.5">
+          <Icon size={11} />
+          {title}
+          <span className="ml-1 text-white/30">({count})</span>
+        </span>
+        <ChevronDown
+          size={11}
+          className={`transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && (
+        <div className="mt-1.5">
+          {count === 0 ? (
+            <p className="px-2 py-1 text-[11px] italic text-white/30">{empty}</p>
+          ) : (
+            children
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -186,7 +426,75 @@ function ActionButton({
   );
 }
 
+// ───────────────────────── Plain-text export ────────────────────────────
+
 function renderText(r: ChatResponse): string {
+  // If the structured case_analysis is present, prefer that as the source
+  // of truth for the copy / Word export — it's better organised than the
+  // raw agent payload dump.
+  const ca = r.case_analysis;
+  if (ca) {
+    const parts: string[] = [];
+    if (ca.summary) parts.push(ca.summary);
+    if (ca.affected_departments.length) {
+      parts.push("Affected departments: " + ca.affected_departments.join(", "));
+    }
+    if (ca.affected_internal.length) {
+      parts.push(
+        "Affected internal documents:\n" +
+          ca.affected_internal
+            .map(
+              (i, n) =>
+                `  ${n + 1}. ${i.title ?? "(redacted)"}` +
+                (i.section ? ` · § ${i.section}` : "") +
+                (i.department ? ` · ${i.department}` : "") +
+                `\n     ${i.snippet}`,
+            )
+            .join("\n"),
+      );
+    }
+    if (ca.external_basis.length) {
+      parts.push(
+        "External basis:\n" +
+          ca.external_basis
+            .map(
+              (e, n) =>
+                `  ${n + 1}. ${e.title ?? "external act"} (${e.authority ?? "—"})` +
+                (e.source_url ? `\n     ${e.source_url}` : "") +
+                `\n     ${e.snippet}`,
+            )
+            .join("\n"),
+      );
+    }
+    if (ca.conflicts.length) {
+      parts.push(
+        "Conflicts:\n" +
+          ca.conflicts
+            .map(
+              (c, n) =>
+                `  ${n + 1}. ${c.internal_ref} ⇄ ${c.external_ref}\n     ${c.why}`,
+            )
+            .join("\n"),
+      );
+    }
+    if (ca.recommendations.length) {
+      parts.push(
+        "Recommendations:\n" +
+          ca.recommendations
+            .map(
+              (r, n) =>
+                `  ${n + 1}. ${r.action}` +
+                (r.target_doc ? ` — ${r.target_doc}` : "") +
+                (r.target_clause ? ` § ${r.target_clause}` : "") +
+                `\n     ${r.suggested_text}`,
+            )
+            .join("\n"),
+      );
+    }
+    return parts.join("\n\n");
+  }
+
+  // Fallback: dump the raw agent payload.
   const parts: string[] = [];
   const agents = (r.response as { agents?: Record<string, unknown> }).agents;
   if (agents) {
