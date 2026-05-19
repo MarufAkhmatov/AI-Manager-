@@ -29,8 +29,17 @@ from app.agents.base import Agent, AgentContext, AgentResult, Citation
 from app.agents.cases import build_case_analysis
 from app.agents.searcher import searcher
 from app.agents.secure import secure
+from app.attachments import store as attachment_store
 from app.config import get_settings
 from app.events import emit
+
+# Cap the attachment text we splice into the query so we don't blow past
+# the agents' input budgets (bge-m3 tokenises ~8k input cleanly; tighter
+# than the upload-time cap of 200_000 chars). The first ~6k chars are
+# usually enough to capture an incoming circular's substance — the
+# Searcher will then surface KB docs that are semantically related to
+# that prefix, and Metodist sees both halves anyway via the chunk pull.
+_ATTACHMENT_QUERY_PREFIX_CHARS = 6000
 
 # Per-agent soft deadlines. Anything not listed gets `DEFAULT_DEADLINE_S`.
 # Numbers chosen for the typical workload, not the worst case — we want
@@ -137,6 +146,37 @@ def _aggregate(name: str, parts: Iterable[AgentResult]) -> AgentResult:
 class Manager:
     name = "AI Manager"
 
+    async def _resolve_query(
+        self, *, query: str, attachment_id: str | None
+    ) -> tuple[str, dict | None]:
+        """Resolve the effective query and a small metadata blob for the
+        UI. If ``attachment_id`` is set, the attachment's extracted text
+        becomes the retrieval/comparison context — the operator's typed
+        message is appended as the explicit instruction."""
+        if not attachment_id:
+            return query, None
+        att = await attachment_store.get(attachment_id)
+        if att is None:
+            # Stale / expired upload — fall back to the user message alone
+            # so the request still succeeds; the chat panel surfaces the
+            # missing-attachment hint via the response.
+            return query, {"missing": True, "id": attachment_id}
+        body = att.text[:_ATTACHMENT_QUERY_PREFIX_CHARS].strip()
+        # Keep the user's instruction first so intent-detection keywords
+        # ("compare", "compliant", "internal", …) still fire against it.
+        effective = (
+            f"{query.strip()}\n\n"
+            f"--- Attachment: {att.filename} ({att.char_count} chars) ---\n"
+            f"{body}"
+        )
+        meta = {
+            "id": att.id,
+            "filename": att.filename,
+            "bytes_size": att.bytes_size,
+            "char_count": att.char_count,
+        }
+        return effective, meta
+
     async def _run(
         self,
         *,
@@ -145,6 +185,7 @@ class Manager:
         role: str,
         plan: set[str],
         deadlines: dict[str, float] | None = None,
+        attachment_meta: dict | None = None,
     ) -> dict:
         """Shared body for `chat` and `suggest`. Differs only in (a) which
         agents are in the plan and (b) which deadlines they get."""
@@ -193,6 +234,7 @@ class Manager:
             "response": final.payload,
             "citations": [asdict(c) for c in final.citations],
             "case_analysis": case,
+            "attachment": attachment_meta,
             "ms_total": ms,
         }
 
@@ -202,11 +244,28 @@ class Manager:
         query: str,
         user_id: uuid.UUID | None,
         role: str,
+        attachment_id: str | None = None,
     ) -> dict:
-        """Full DAG — Searcher / Shadow / Metodist as the intent dictates."""
-        plan = _detect_intent(query)
+        """Full DAG — Searcher / Shadow / Metodist as the intent dictates.
+        If ``attachment_id`` is set, the upload's OCR'd text is folded
+        into the retrieval/comparison context (Case 1 flow)."""
+        effective, meta = await self._resolve_query(
+            query=query, attachment_id=attachment_id
+        )
+        plan = _detect_intent(effective)
+        # Uploads almost always carry compliance / comparison intent —
+        # an incoming circular needs to be checked against the KB. Make
+        # Metodist part of the plan unconditionally so Case 1 lights up
+        # the comparison flow even when the user's message is terse.
+        if meta and not meta.get("missing"):
+            plan.add("AI Metodist")
         return await self._run(
-            query=query, user_id=user_id, role=role, plan=plan, deadlines=None
+            query=effective,
+            user_id=user_id,
+            role=role,
+            plan=plan,
+            deadlines=None,
+            attachment_meta=meta,
         )
 
     async def suggest(
@@ -215,6 +274,7 @@ class Manager:
         query: str,
         user_id: uuid.UUID | None,
         role: str,
+        attachment_id: str | None = None,
     ) -> dict:
         """Live preview Manager. Strips the slow Metodist (which can take
         ~15 s on a cold Claude call) and tightens every remaining agent's
@@ -223,13 +283,17 @@ class Manager:
         Designed for the typing-as-you-go Recommendation preview: it
         gives the operator a feel for what AI Manager would say without
         burning Anthropic tokens on every keystroke."""
-        plan = _detect_intent(query) - {"AI Metodist"}
+        effective, meta = await self._resolve_query(
+            query=query, attachment_id=attachment_id
+        )
+        plan = _detect_intent(effective) - {"AI Metodist"}
         return await self._run(
-            query=query,
+            query=effective,
             user_id=user_id,
             role=role,
             plan=plan,
             deadlines={"AI Searcher": 2.0, "AI Shadow": 2.0},
+            attachment_meta=meta,
         )
 
 

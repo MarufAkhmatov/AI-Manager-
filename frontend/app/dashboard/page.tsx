@@ -4,8 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { TopHeader } from "@/components/TopHeader";
 import { WorkflowCanvas } from "@/components/WorkflowCanvas";
-import type { ChatResponse } from "@/components/ChatPanel";
-import { ApiError, api, hasToken, openActivityWS } from "@/lib/api";
+import type { ChatResponse, PendingAttachment } from "@/components/ChatPanel";
+import {
+  ApiError,
+  api,
+  hasToken,
+  openActivityWS,
+  uploadAttachment,
+} from "@/lib/api";
 
 interface ActivityEvent {
   agent: string;
@@ -27,33 +33,39 @@ const ALL_AGENT_NAMES = [
   "AI Secure",
 ];
 
+interface ChatPayload {
+  message: string;
+  attachment_id?: string;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
 
-  // Hard auth gate — bounce to /login if there's no token. The api helper
-  // also clears the token on 401 from the server, so a subsequent reload
-  // will land here.
   useEffect(() => {
     if (!hasToken()) {
       router.replace("/login");
     }
   }, [router]);
 
-  // ── Workflow / agent activity ──
+  // Workflow / agent activity
   const [activeAgents, setActiveAgents] = useState<string[]>([]);
   const [recentByAgent, setRecentByAgent] = useState<Record<string, number>>({});
   const [demoUntil, setDemoUntil] = useState<number>(0);
 
-  // ── Chat state (lifted so RecommendationPanel can react to typing) ──
+  // Chat state (lifted)
   const [draft, setDraft] = useState("");
   const [history, setHistory] = useState<string[]>([]);
   const [response, setResponse] = useState<ChatResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [previewing, setPreviewing] = useState(false);
 
+  // Attachment state
+  const [attachment, setAttachment] = useState<PendingAttachment | null>(null);
+  const [attachmentBusy, setAttachmentBusy] = useState(false);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+
   const previewAbortRef = useRef<AbortController | null>(null);
 
-  // Live activity stream — keeps the chart pulsing for background work.
   useEffect(() => {
     if (!hasToken()) return;
     const ws = openActivityWS();
@@ -68,7 +80,6 @@ export default function DashboardPage() {
     return () => ws.close();
   }, []);
 
-  // Derive activeAgents from the recency map + demo override.
   useEffect(() => {
     const t = setInterval(() => {
       const now = Date.now();
@@ -83,21 +94,25 @@ export default function DashboardPage() {
     return () => clearInterval(t);
   }, [recentByAgent, demoUntil]);
 
-  // Auto-suggest: debounce the draft and hit /api/chat/suggest — a lighter
-  // Manager pass that skips Metodist's Claude call, so we don't burn
-  // tokens (or wait 15 s) on every keystroke.
+  // Auto-suggest debounced. Uploads also trigger the preview — even an
+  // empty draft is interesting when the attachment carries the question.
   useEffect(() => {
     if (busy) return;
     const text = draft.trim();
-    if (text.length < PREVIEW_MIN_CHARS) return;
+    if (!attachment && text.length < PREVIEW_MIN_CHARS) return;
+
     const t = setTimeout(() => {
       previewAbortRef.current?.abort();
       const ac = new AbortController();
       previewAbortRef.current = ac;
       setPreviewing(true);
+      const payload: ChatPayload = {
+        message: text || "tahlil qiling",
+        attachment_id: attachment?.attachment_id,
+      };
       api<ChatResponse>("/api/chat/suggest", {
         method: "POST",
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify(payload),
         signal: ac.signal,
       })
         .then((res) => {
@@ -112,31 +127,73 @@ export default function DashboardPage() {
           if (e instanceof ApiError && e.kind === "auth") {
             router.replace("/login");
           }
-          /* Other errors are silent on preview — the explicit send surfaces them. */
         })
         .finally(() => {
           if (!ac.signal.aborted) setPreviewing(false);
         });
     }, PREVIEW_DEBOUNCE_MS);
     return () => clearTimeout(t);
-  }, [draft, busy, router]);
+  }, [draft, attachment, busy, router]);
+
+  async function handleAttach(file: File) {
+    setAttachmentError(null);
+    setAttachmentBusy(true);
+    try {
+      const up = await uploadAttachment(file);
+      setAttachment({
+        attachment_id: up.attachment_id,
+        filename: up.filename,
+        bytes_size: up.bytes_size,
+        char_count: up.char_count,
+      });
+    } catch (e) {
+      if (e instanceof ApiError && e.kind === "auth") {
+        router.replace("/login");
+        return;
+      }
+      const msg =
+        e instanceof ApiError
+          ? e.kind === "network"
+            ? "Backend bilan aloqa yo'q — server ishlayotganini tekshiring."
+            : `Yuklash xatosi (${e.status}): ${e.message.slice(0, 120)}`
+          : (e as Error).message;
+      setAttachmentError(msg);
+      setAttachment(null);
+    } finally {
+      setAttachmentBusy(false);
+    }
+  }
+
+  function handleClearAttachment() {
+    setAttachment(null);
+    setAttachmentError(null);
+  }
 
   async function handleSend() {
     const text = draft.trim();
-    if (!text || busy) return;
+    if (!text && !attachment) return;
+    if (busy) return;
     previewAbortRef.current?.abort();
     setBusy(true);
-    setHistory((prev) => [...prev, text]);
+    const userBubble = text || `📎 ${attachment?.filename}`;
+    setHistory((prev) => [...prev, userBubble]);
     setDraft("");
+    const sentAttachment = attachment;
     try {
+      const payload: ChatPayload = {
+        message: text || "tahlil qiling",
+        attachment_id: sentAttachment?.attachment_id,
+      };
       const res = await api<ChatResponse>("/api/chat", {
         method: "POST",
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify(payload),
       });
       setResponse(res);
       setActiveAgents((prev) =>
         Array.from(new Set([...prev, ...res.agents_used])),
       );
+      // Successful send — clear the attachment so the next message starts fresh.
+      setAttachment(null);
     } catch (e) {
       if (e instanceof ApiError && e.kind === "auth") {
         router.replace("/login");
@@ -192,6 +249,11 @@ export default function DashboardPage() {
           busy={busy}
           previewing={previewing}
           response={response}
+          attachment={attachment}
+          attachmentBusy={attachmentBusy}
+          attachmentError={attachmentError}
+          onAttach={handleAttach}
+          onClearAttachment={handleClearAttachment}
         />
       </div>
     </main>

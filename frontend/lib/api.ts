@@ -62,6 +62,49 @@ export function openActivityWS(): WebSocket {
   return new WebSocket(`${WS_BASE}/ws/activity`);
 }
 
+export interface UploadedAttachment {
+  attachment_id: string;
+  filename: string;
+  bytes_size: number;
+  char_count: number;
+  preview: string;
+}
+
+// Upload a single chat attachment (multipart). Returns the metadata the
+// chat panel needs to render the pill + pass back on /api/chat.
+export async function uploadAttachment(file: File): Promise<UploadedAttachment> {
+  const fd = new FormData();
+  fd.append("file", file);
+
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api/chat/attachments`, {
+      method: "POST",
+      headers: { ...authHeader() }, // no Content-Type — browser sets the boundary
+      body: fd,
+    });
+  } catch (e) {
+    if ((e as Error).name === "AbortError") throw e;
+    throw new ApiError(
+      `Network error: ${(e as Error).message}`,
+      0,
+      "network",
+    );
+  }
+  if (res.status === 401) {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("aim_token");
+    }
+    throw new ApiError("Sessiya tugadi — qaytadan kiring", 401, "auth");
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    const kind = res.status >= 500 ? "server" : "client";
+    throw new ApiError(body || res.statusText, res.status, kind);
+  }
+  return (await res.json()) as UploadedAttachment;
+}
+
 export type Role = "admin" | "analyst" | "viewer";
 
 export interface Me {

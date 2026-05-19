@@ -148,6 +148,12 @@ interface Props {
   busy: boolean;
   previewing: boolean;
   response: ChatResponse | null;
+
+  attachment: import("@/components/ChatPanel").PendingAttachment | null;
+  attachmentBusy: boolean;
+  attachmentError: string | null;
+  onAttach(file: File): void;
+  onClearAttachment(): void;
 }
 
 export function WorkflowCanvas({
@@ -160,6 +166,11 @@ export function WorkflowCanvas({
   busy,
   previewing,
   response,
+  attachment,
+  attachmentBusy,
+  attachmentError,
+  onAttach,
+  onClearAttachment,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [canvas, setCanvas] = useState<Box | null>(null);
@@ -353,6 +364,11 @@ export function WorkflowCanvas({
           busy={busy}
           expanded={chatExpanded}
           onToggleExpand={toggleChatExpand}
+          attachment={attachment}
+          attachmentBusy={attachmentBusy}
+          attachmentError={attachmentError}
+          onAttach={onAttach}
+          onClearAttachment={onClearAttachment}
         />
       </DraggableLayer>
 

@@ -10,7 +10,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.agents.architect import architect
 from app.agents.regulyator import regulyator
-from app.api import routes_agents, routes_auth, routes_chat, routes_kb, ws_hub
+from app.api import (
+    routes_agents,
+    routes_attachments,
+    routes_auth,
+    routes_chat,
+    routes_kb,
+    ws_hub,
+)
 from app.config import get_settings
 from app.events import emit
 
@@ -76,6 +83,7 @@ async def healthz() -> dict[str, str]:
 
 app.include_router(routes_auth.router)
 app.include_router(routes_chat.router)
+app.include_router(routes_attachments.router)
 app.include_router(routes_kb.router)
 app.include_router(routes_agents.router)
 app.include_router(ws_hub.router)
