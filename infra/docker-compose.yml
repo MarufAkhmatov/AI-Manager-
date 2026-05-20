@@ -39,6 +39,11 @@ services:
     image: ollama/ollama:latest
     container_name: aim-ollama
     restart: unless-stopped
+    environment:
+      # Keep models resident once loaded. A cold 7B load is ~60-70s on CPU,
+      # far past the agent deadlines (Searcher 2.2s, extract 12s), so without
+      # this the first query after every idle period silently falls back.
+      OLLAMA_KEEP_ALIVE: "-1"
     volumes:
       - aim-ollama-data:/root/.ollama
     ports:

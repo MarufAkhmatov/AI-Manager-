@@ -1,0 +1,11 @@
+# Keep shell scripts LF so they run inside Linux containers even when the
+# repo is checked out on Windows. Without this, Windows CRLF endings turn the
+# entrypoint shebang into `#!/usr/bin/env bash\r`, which fails with exit 127
+# ("env: 'bash\r': No such file or directory").
+*.sh text eol=lf
+
+# PowerShell launchers stay CRLF for Windows.
+*.ps1 text eol=crlf
+
+# Default: normalise to LF in the repo, let git pick native on checkout.
+* text=auto
