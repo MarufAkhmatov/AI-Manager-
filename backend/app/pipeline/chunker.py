@@ -80,8 +80,43 @@ def _hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _hard_split(sentence: str, limit: int) -> list[str]:
+    """Break a single oversized 'sentence' into word-runs of <= `limit` tokens.
+
+    The sentence segmenter leaves long unpunctuated blocks (OCR dumps, tables,
+    URL/number lists) as one giant segment. Left whole they overflow the
+    embedding model's context window and Ollama rejects the embed with
+    HTTP 400 'input length exceeds the context length'. Splitting on word
+    boundaries keeps every chunk well under the limit without losing content.
+    """
+    words = sentence.split()
+    if not words:
+        return []
+    pieces: list[str] = []
+    buf: list[str] = []
+    buf_tokens = 0
+    for w in words:
+        wt = _token_count(w)
+        if buf and buf_tokens + wt > limit:
+            pieces.append(" ".join(buf))
+            buf, buf_tokens = [], 0
+        buf.append(w)
+        buf_tokens += wt
+    if buf:
+        pieces.append(" ".join(buf))
+    return pieces
+
+
 def chunk(text: str, *, section_path: str | None = None) -> list[Chunk]:
-    sentences = _split_sentences(text)
+    raw_sentences = _split_sentences(text)
+    # Pre-split any single segment that already exceeds the chunk budget so the
+    # main packing loop never emits an oversized chunk (which would 400 at embed).
+    sentences: list[str] = []
+    for s in raw_sentences:
+        if _token_count(s) > _TARGET_MAX:
+            sentences.extend(_hard_split(s, _TARGET_MAX))
+        else:
+            sentences.append(s)
     chunks: list[Chunk] = []
 
     buf: list[str] = []
