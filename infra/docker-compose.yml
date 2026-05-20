@@ -4,6 +4,7 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     container_name: aim-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-ai_manager}
       POSTGRES_USER: ${POSTGRES_USER:-ai_manager}
@@ -22,6 +23,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: aim-redis
+    restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - aim-redis-data:/data
@@ -36,6 +38,7 @@ services:
   ollama:
     image: ollama/ollama:latest
     container_name: aim-ollama
+    restart: unless-stopped
     volumes:
       - aim-ollama-data:/root/.ollama
     ports:
@@ -46,36 +49,72 @@ services:
       timeout: 5s
       retries: 20
 
+  # One-shot: pulls the local models the platform needs, then exits. The API
+  # waits for this to finish so the first query has its models ready.
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: aim-ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        echo "pulling router model (${OLLAMA_MODEL_ROUTER:-qwen2.5:7b-instruct})…"
+        ollama pull ${OLLAMA_MODEL_ROUTER:-qwen2.5:7b-instruct}
+        echo "pulling synthesis model (${OLLAMA_MODEL_SYNTH:-llama3.1:8b})…"
+        ollama pull ${OLLAMA_MODEL_SYNTH:-llama3.1:8b}
+        echo "pulling embedding model (${OLLAMA_MODEL_EMBED:-bge-m3})…"
+        ollama pull ${OLLAMA_MODEL_EMBED:-bge-m3}
+        echo "ollama models ready."
+    restart: "no"
+
   api:
     build:
       context: ../backend
       dockerfile: Dockerfile
     container_name: aim-api
+    restart: unless-stopped
     env_file: ../.env
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-      ollama:
-        condition: service_started
+      ollama-init:
+        condition: service_completed_successfully
     volumes:
-      # Mount the operator's runtime root. On Windows hosts the AIM_ROOT
-      # path is provided via .env; in dev set it to a local directory.
+      # Mount the operator's runtime root. On Windows hosts set AIM_ROOT in
+      # .env to your KB path; in dev point it at a local directory.
       - ${AIM_ROOT}:/data/aim-root
     environment:
       AIM_ROOT: /data/aim-root
     ports:
       - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
 
   web:
     build:
       context: ../frontend
       dockerfile: Dockerfile
+      args:
+        # Browser-facing URLs — must be the published host ports, not the
+        # internal docker service names. Override via shell env if you serve
+        # the API on a different host/port.
+        NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-http://localhost:8000}
+        NEXT_PUBLIC_WS_BASE: ${NEXT_PUBLIC_WS_BASE:-ws://localhost:8000}
     container_name: aim-web
-    env_file: ../.env
+    restart: unless-stopped
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     ports:
       - "3000:3000"
 

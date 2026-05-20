@@ -50,37 +50,62 @@ Docker quick-start below.
 
 ## Quick start (operator) — full stack with Docker
 
-Prereqs: Windows 10/11 with Docker Desktop, Python 3.11 if you want to
-run the seed and verifier scripts directly.
+Prereqs: Docker Desktop (Windows/macOS) or Docker Engine + Compose v2
+(Linux). ~12 GB free disk for the Ollama models, ~10 GB RAM.
+
+### One command
 
 ```powershell
-# 1. Create the runtime root + lock ACLs on KB\Lotus.
-powershell -ExecutionPolicy Bypass -File scripts\bootstrap_root.ps1
-
-# 2. Configure secrets.
+# Windows (PowerShell, from the repo root)
 copy .env.example .env
-# edit .env: set POSTGRES_PASSWORD and JWT_SECRET to strong values
-
-# 3. Bring up the stack (postgres+pgvector, redis, ollama, api, web).
-docker compose -f infra\docker-compose.yml up -d
-
-# 4. Run database migrations.
-docker compose -f infra\docker-compose.yml exec api alembic upgrade head
-
-# 5. Pull local models in Ollama (one-time).
-docker compose -f infra\docker-compose.yml exec ollama \
-    sh -c "ollama pull qwen2.5:7b-instruct && \
-           ollama pull llama3.1:8b && \
-           ollama pull bge-m3"
-
-# 6. Create the initial admin.
-docker compose -f infra\docker-compose.yml exec api \
-    python -m scripts.seed_admin --username admin --password 'strong-pwd' --role admin
+#   edit .env: POSTGRES_PASSWORD, JWT_SECRET, ADMIN_PASSWORD, AIM_ROOT
+.\scripts\prod_up.ps1
 ```
 
-The web UI is then at http://localhost:3000 and the API at
-http://localhost:8000 (`/docs` for OpenAPI, `/ws/activity` for the
-live agent activity feed).
+```bash
+# Linux / macOS, from the repo root
+cp .env.example .env
+#   edit .env: POSTGRES_PASSWORD, JWT_SECRET, ADMIN_PASSWORD, AIM_ROOT
+./scripts/prod_up.sh
+```
+
+The launcher builds the images and runs `docker compose up -d`. From there
+everything is automatic:
+
+1. **`ollama-init`** pulls the three local models (`qwen2.5:7b-instruct`,
+   `llama3.1:8b`, `bge-m3`) — slow on the first run only (cached in a volume).
+2. **`api`** waits for Postgres + Redis + the model pull, then its entrypoint
+   runs `alembic upgrade head` and seeds the `ADMIN_USERNAME` / `ADMIN_PASSWORD`
+   from your `.env` (idempotent), and starts uvicorn.
+3. **`web`** starts once the API is healthy.
+
+Then open <http://localhost:3000/dashboard> and sign in with your
+`ADMIN_USERNAME` / `ADMIN_PASSWORD`. The API is at <http://localhost:8000>
+(`/docs` for OpenAPI, `/ws/activity` for the live activity feed).
+
+Follow startup:
+
+```bash
+docker compose --env-file .env -f infra/docker-compose.yml logs -f
+```
+
+### Equivalent manual steps
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\bootstrap_root.ps1   # KB tree + ACLs
+docker compose --env-file .env -f infra\docker-compose.yml build
+docker compose --env-file .env -f infra\docker-compose.yml up -d
+# migrations + admin seed run automatically in the api entrypoint.
+```
+
+### AI Metodist (optional)
+
+The `metodist` sub-agent wraps a separate `metodist-agent` package that
+ships with the bank corpus and calls the Anthropic API. It is optional —
+without it the platform still answers (Searcher + Shadow + Secure, with
+conflict/recommendation extraction via the local Ollama model). To enable
+it, mount the standalone into the `api` container, `pip install -e` it, and
+set `ANTHROPIC_API_KEY`. See `backend/app/agents/metodist.py`.
 
 ## What happens at first start
 
