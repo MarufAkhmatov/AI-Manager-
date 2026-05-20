@@ -83,7 +83,24 @@ class DemoMetodist(Agent):
                 "mode": "ask",
                 "text": text,
                 "internal_count": 2,
-                "external_count": 1,
+                "external_count": 2,
+                # External chunks carry authority + source_url so the
+                # CaseAnalysis builder can populate external_basis (and the
+                # demo extraction can fabricate conflicts against them).
+                "external_chunks": [
+                    {
+                        "source_url": "https://lex.uz/docs/demo-250",
+                        "document_number": "ЎзР Қонуни 250-сон (demo)",
+                        "authority": "lex.uz",
+                        "text": "Demo: banklar faoliyati to'g'risidagi qonunning tegishli moddasi.",
+                    },
+                    {
+                        "source_url": "https://cbu.uz/circulars/2025-14",
+                        "document_number": "Циркуляр №2025/14 (demo)",
+                        "authority": "cbu.uz",
+                        "text": "Demo: kapital yetarliligi normativi to'g'risidagi sirkulyar bandi.",
+                    },
+                ],
             },
             citations=[
                 Citation(

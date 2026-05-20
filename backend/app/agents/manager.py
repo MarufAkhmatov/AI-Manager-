@@ -27,6 +27,7 @@ from typing import Iterable
 
 from app.agents.base import Agent, AgentContext, AgentResult, Citation
 from app.agents.cases import build_case_analysis
+from app.agents.extract import enrich_case_analysis
 from app.agents.searcher import searcher
 from app.agents.secure import secure
 from app.attachments import store as attachment_store
@@ -62,26 +63,35 @@ def _detect_intent(q: str) -> set[str]:
     lower = q.lower()
     plan: set[str] = {"AI Searcher"}
 
-    if any(k in lower for k in ("lotus", "internal", "confidential", "внутр", "лотус")):
-        plan.add("AI Shadow")
+    # Lotus / confidential — EN + RU + UZ.
     if any(
         k in lower
         for k in (
-            "compliant",
-            "conflict",
-            "gap",
-            "policy",
-            "normative",
-            "соответств",
-            "конфликт",
-            "нарушени",
+            "lotus", "internal", "confidential",
+            "внутр", "лотус", "конфиденциальн",
+            "ichki", "maxfiy", "lotus",
+        )
+    ):
+        plan.add("AI Shadow")
+
+    # Normative / compliance / comparison — EN + RU + UZ. These pull in
+    # AI Metodist for the diff / gap / conflict analysis.
+    if any(
+        k in lower
+        for k in (
+            # English
+            "compliant", "compliance", "conflict", "gap", "policy",
+            "normative", "regulation", "amend", "clause", "requirement",
+            # Russian
+            "соответств", "конфликт", "нарушени", "норматив", "положени",
+            "требовани", "регламент", "пункт",
+            # Uzbek (Latin + Cyrillic)
+            "muvofiq", "nizom", "normativ", "qoida", "talab", "siyosat",
+            "qiyos", "taqqosla", "band", "hujjat", "muvofiqlash",
+            "мувофиқ", "низом", "қоида", "талаб", "сиёсат",
         )
     ):
         plan.add("AI Metodist")
-    if any(k in lower for k in ("cbu", "lex.uz", "ipakyuli", "regulator", "circular", "регулят")):
-        # Regulyator data is in KB already; the *agent* itself doesn't run
-        # on the request path. Mark intent for observability only.
-        pass
     return plan
 
 
@@ -186,9 +196,12 @@ class Manager:
         plan: set[str],
         deadlines: dict[str, float] | None = None,
         attachment_meta: dict | None = None,
+        enrich: bool = False,
     ) -> dict:
         """Shared body for `chat` and `suggest`. Differs only in (a) which
-        agents are in the plan and (b) which deadlines they get."""
+        agents are in the plan, (b) which deadlines they get, and (c)
+        whether the structured conflict/recommendation extraction runs
+        (only on the full `chat` path — the preview stays fast)."""
         task_id = uuid.uuid4()
         ctx = AgentContext(task_id=task_id, user_id=user_id, role=role, query=query)
         start = time.perf_counter()
@@ -226,14 +239,19 @@ class Manager:
         # Structured case analysis — the Recommendation panel's preferred
         # render path. Built from the masked aggregate so confidential ids
         # / titles are already stripped before they hit the schema.
-        case = build_case_analysis(final).to_dict()
+        case_obj = build_case_analysis(final)
+        if enrich:
+            # Phase 3: distill conflicts + recommendations via a cheap local
+            # LLM pass (Ollama qwen2.5) or a deterministic demo stub. Only on
+            # the full chat path — previews skip this to stay sub-second.
+            case_obj = await enrich_case_analysis(case_obj, query=query)
 
         return {
             "task_id": str(task_id),
             "agents_used": [p.agent for p in parts] + [secure.name],
             "response": final.payload,
             "citations": [asdict(c) for c in final.citations],
-            "case_analysis": case,
+            "case_analysis": case_obj.to_dict(),
             "attachment": attachment_meta,
             "ms_total": ms,
         }
@@ -266,6 +284,7 @@ class Manager:
             plan=plan,
             deadlines=None,
             attachment_meta=meta,
+            enrich=True,
         )
 
     async def suggest(
