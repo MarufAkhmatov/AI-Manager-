@@ -11,6 +11,7 @@ import {
   hasToken,
   openActivityWS,
   uploadAttachment,
+  type NotificationItem,
 } from "@/lib/api";
 
 interface ActivityEvent {
@@ -64,6 +65,9 @@ export default function DashboardPage() {
   const [attachmentBusy, setAttachmentBusy] = useState(false);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
 
+  // Notifications — bump notifRefresh to make the bell refetch.
+  const [notifRefresh, setNotifRefresh] = useState(0);
+
   const previewAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -73,12 +77,29 @@ export default function DashboardPage() {
       try {
         const ev: ActivityEvent = JSON.parse(msg.data);
         setRecentByAgent((prev) => ({ ...prev, [ev.agent]: Date.now() }));
+        // A fresh audit finding → nudge the bell to refetch its feed.
+        if (ev.event === "audit.finding") {
+          setNotifRefresh((n) => n + 1);
+        }
       } catch {
         /* ignore */
       }
     };
     return () => ws.close();
   }, []);
+
+  // Load a notification's stored analysis into the Recommendation panel.
+  function handleViewNotification(item: NotificationItem) {
+    setResponse({
+      task_id: `notif-${item.id}`,
+      agents_used: ["AI Regulyator", "AI Searcher", "AI Metodist", "AI Secure"],
+      response: {},
+      citations: [],
+      case_analysis: item.case_analysis,
+      ms_total: 0,
+    });
+    setHistory((prev) => [...prev, `🔔 Audit: ${item.title}`]);
+  }
 
   useEffect(() => {
     const t = setInterval(() => {
@@ -237,6 +258,8 @@ export default function DashboardPage() {
         isRunning={isRunning}
         activeAgents={activeAgents}
         onRun={handleRun}
+        notifRefresh={notifRefresh}
+        onViewNotification={handleViewNotification}
       />
       <div className="relative flex-1">
         <WorkflowCanvas

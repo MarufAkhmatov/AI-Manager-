@@ -64,6 +64,12 @@ class Settings(BaseSettings):
     # shape) are preserved so the UI looks and behaves identically.
     aim_demo: bool = False
 
+    # Phase 4 — auto-audit. When on, AI Architect fires a normative audit
+    # (new external act vs internal KB) every time it finishes ingesting a
+    # `regulator`-category document, dropping the finding in the
+    # notifications feed. Disable to crawl/ingest without auto-analysis.
+    aim_auto_audit: bool = True
+
     # Derived KB sub-paths -----------------------------------------------------
     @property
     def kb(self) -> Path:

@@ -62,6 +62,36 @@ export function openActivityWS(): WebSocket {
   return new WebSocket(`${WS_BASE}/ws/activity`);
 }
 
+import type { CaseAnalysis } from "@/components/ChatPanel";
+
+export interface NotificationItem {
+  id: string;
+  kind: string;
+  title: string;
+  source_url: string | null;
+  summary: string;
+  case_analysis: CaseAnalysis;
+  created_at: number;
+  read: boolean;
+}
+
+export interface NotificationsResponse {
+  unread: number;
+  items: NotificationItem[];
+}
+
+export async function fetchNotifications(): Promise<NotificationsResponse> {
+  return api<NotificationsResponse>("/api/notifications");
+}
+
+export async function markNotificationRead(id: string): Promise<void> {
+  await api(`/api/notifications/${id}/read`, { method: "POST" });
+}
+
+export async function markAllNotificationsRead(): Promise<void> {
+  await api("/api/notifications/read-all", { method: "POST" });
+}
+
 export interface UploadedAttachment {
   attachment_id: string;
   filename: string;

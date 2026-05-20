@@ -16,6 +16,7 @@ from app.api import (
     routes_auth,
     routes_chat,
     routes_kb,
+    routes_notifications,
     ws_hub,
 )
 from app.config import get_settings
@@ -41,6 +42,32 @@ async def _prewarm_metodist() -> None:
         )
 
 
+async def _seed_demo_notifications() -> None:
+    """Demo mode: there's no real crawl, so seed a couple of auto-audit
+    findings at boot. Gives the operator a populated bell to click through
+    without waiting for the daily Regulyator schedule."""
+    from app.agents.audit import audit_document
+
+    await audit_document(
+        title="CBU Циркуляр №2025/14 — kapital yetarliligi (demo)",
+        text=(
+            "Markaziy bankning yangi sirkulyari kredit risklari hisobi va "
+            "kapital yetarliligi normativlarini o'zgartirdi. Ipoteka "
+            "kreditlari uchun risk koeffitsiyenti 75% etib belgilandi."
+        ),
+        source_url="https://cbu.uz/circulars/2025-14",
+    )
+    await audit_document(
+        title="ЎзР Қонуни 250-сон — banklar faoliyati (demo)",
+        text=(
+            "Banklar faoliyati to'g'risidagi qonunga o'zgartishlar: "
+            "iste'mol kreditlari bo'yicha maksimal yillik foiz stavkasi "
+            "cheklandi va mijozni identifikatsiya qilish talablari kuchaytirildi."
+        ),
+        source_url="https://lex.uz/docs/demo-250",
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
@@ -48,6 +75,10 @@ async def lifespan(app: FastAPI):
         await architect.boot()
         asyncio.create_task(_prewarm_metodist())
         regulyator.schedule()
+    else:
+        # Populate the notifications bell so the Phase-4 flow is visible
+        # without a real crawl + ingestion cycle.
+        asyncio.create_task(_seed_demo_notifications())
     try:
         yield
     finally:
@@ -86,4 +117,5 @@ app.include_router(routes_chat.router)
 app.include_router(routes_attachments.router)
 app.include_router(routes_kb.router)
 app.include_router(routes_agents.router)
+app.include_router(routes_notifications.router)
 app.include_router(ws_hub.router)

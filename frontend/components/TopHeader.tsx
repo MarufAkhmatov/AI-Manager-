@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Bell,
   ChevronDown,
   Download,
   LogOut,
@@ -15,7 +14,8 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { logout } from "@/lib/api";
+import { NotificationsBell } from "@/components/NotificationsBell";
+import { logout, type NotificationItem } from "@/lib/api";
 
 const AGENTS = [
   "AI Manager",
@@ -31,12 +31,20 @@ interface Props {
   isRunning: boolean;
   activeAgents: string[];
   onRun(): void;
+  notifRefresh: number;
+  onViewNotification(item: NotificationItem): void;
 }
 
 // Top header — pill buttons, glass pills, emerald accents — ported from the
 // Metodistai Figma (Header.tsx) and adapted for AI Manager content
 // (agents instead of folders, run-workflow instead of audit committee).
-export function TopHeader({ isRunning, activeAgents, onRun }: Props) {
+export function TopHeader({
+  isRunning,
+  activeAgents,
+  onRun,
+  notifRefresh,
+  onViewNotification,
+}: Props) {
   const router = useRouter();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [agentsOpen, setAgentsOpen] = useState(false);
@@ -118,14 +126,10 @@ export function TopHeader({ isRunning, activeAgents, onRun }: Props) {
           >
             <Settings size={18} />
           </button>
-          <button
-            type="button"
-            className="relative grid h-10 w-10 place-items-center rounded-full border border-line bg-surface text-white/70 transition hover:text-white"
-            aria-label="Notifications"
-          >
-            <Bell size={18} />
-            <span className="absolute right-0 top-0 grid h-3 w-3 place-items-center rounded-full border-2 border-bg bg-danger text-[8px] font-bold text-white" />
-          </button>
+          <NotificationsBell
+            refreshSignal={notifRefresh}
+            onView={onViewNotification}
+          />
           <button
             type="button"
             onClick={signOut}

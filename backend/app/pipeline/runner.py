@@ -14,6 +14,7 @@ from pathlib import Path
 
 from sqlalchemy import select, update
 
+from app.config import get_settings
 from app.db.models import ProcessedFile
 from app.db.session import session_scope
 from app.events import emit
@@ -117,4 +118,34 @@ async def process_file(src: Path) -> uuid.UUID:
         chunks=len(chunks),
         processed_path=str(out_path),
     )
+
+    # Phase 4 — auto-audit. A freshly-ingested regulator act gets compared
+    # against the internal KB straight away, so the operator wakes up to a
+    # "these internal docs need updating" finding instead of having to ask.
+    # Fire-and-forget: the audit must never hold up or break ingestion.
+    if get_settings().aim_auto_audit:
+        await _maybe_auto_audit(doc_id, norm.text)
+
     return doc_id
+
+
+async def _maybe_auto_audit(document_id: uuid.UUID, text: str) -> None:
+    """Trigger a normative audit if the just-ingested doc is a regulator
+    act. Looks up category / title / source_url from the DB row Architect
+    wrote during ingest."""
+    from app.db.models import Document
+
+    async with session_scope() as session:
+        doc = await session.scalar(select(Document).where(Document.id == document_id))
+    if doc is None or doc.category != "regulator":
+        return
+
+    from app.agents.audit import audit_document
+
+    asyncio.create_task(
+        audit_document(
+            title=doc.title or "external act",
+            text=text,
+            source_url=doc.source_url,
+        )
+    )
