@@ -70,6 +70,12 @@ class Settings(BaseSettings):
     # notifications feed. Disable to crawl/ingest without auto-analysis.
     aim_auto_audit: bool = True
 
+    # LLM-driven intent classification. When on (and not in demo mode), the
+    # Manager asks the local Ollama router model which specialist agents to
+    # run instead of relying on keyword rules. Falls back to the rules on
+    # any failure. Disable to force the deterministic keyword heuristic.
+    aim_llm_intent: bool = True
+
     # Derived KB sub-paths -----------------------------------------------------
     @property
     def kb(self) -> Path:

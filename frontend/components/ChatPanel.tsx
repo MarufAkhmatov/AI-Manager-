@@ -53,6 +53,7 @@ export interface ChatResponse {
     score: number;
   }>;
   case_analysis?: CaseAnalysis;
+  case_type?: string;
   attachment?: AttachmentMeta | { missing: true; id: string } | null;
   ms_total: number;
 }

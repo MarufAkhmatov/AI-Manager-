@@ -193,8 +193,20 @@ function StructuredCase({
   const hasRecs = ca.recommendations.length > 0;
   const hasDepts = ca.affected_departments.length > 0;
 
+  const caseLabel: Record<string, string> = {
+    incoming_letter: "Kelgan xat tahlili",
+    product_check: "Mahsulot muvofiqligi",
+    normative_audit: "Normativ audit",
+    general: "Umumiy so'rov",
+  };
+
   return (
     <div className="space-y-4">
+      {response.case_type && response.case_type !== "general" && (
+        <span className="inline-block rounded-full border border-neon/30 bg-neon-soft px-2.5 py-[3px] text-[10px] font-medium uppercase tracking-wider text-neon">
+          {caseLabel[response.case_type] ?? response.case_type}
+        </span>
+      )}
       {ca.summary && (
         <p className="select-text whitespace-pre-wrap text-sm leading-relaxed text-white/90">
           {ca.summary}

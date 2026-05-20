@@ -28,6 +28,7 @@ from typing import Iterable
 from app.agents.base import Agent, AgentContext, AgentResult, Citation
 from app.agents.cases import build_case_analysis
 from app.agents.extract import enrich_case_analysis
+from app.agents.intent import detect_intent
 from app.agents.searcher import searcher
 from app.agents.secure import secure
 from app.attachments import store as attachment_store
@@ -51,48 +52,6 @@ AGENT_DEADLINES_S: dict[str, float] = {
     "AI Metodist": 15.0,  # Claude API + retrieval; model is pre-warmed at boot
 }
 DEFAULT_DEADLINE_S = 2.2
-
-
-def _detect_intent(q: str) -> set[str]:
-    """Return the set of agent names to run, based on simple keyword rules.
-
-    The Searcher is always part of the plan because every chat answer
-    benefits from grounded citations; AI Secure is appended unconditionally
-    at the egress stage.
-    """
-    lower = q.lower()
-    plan: set[str] = {"AI Searcher"}
-
-    # Lotus / confidential — EN + RU + UZ.
-    if any(
-        k in lower
-        for k in (
-            "lotus", "internal", "confidential",
-            "внутр", "лотус", "конфиденциальн",
-            "ichki", "maxfiy", "lotus",
-        )
-    ):
-        plan.add("AI Shadow")
-
-    # Normative / compliance / comparison — EN + RU + UZ. These pull in
-    # AI Metodist for the diff / gap / conflict analysis.
-    if any(
-        k in lower
-        for k in (
-            # English
-            "compliant", "compliance", "conflict", "gap", "policy",
-            "normative", "regulation", "amend", "clause", "requirement",
-            # Russian
-            "соответств", "конфликт", "нарушени", "норматив", "положени",
-            "требовани", "регламент", "пункт",
-            # Uzbek (Latin + Cyrillic)
-            "muvofiq", "nizom", "normativ", "qoida", "talab", "siyosat",
-            "qiyos", "taqqosla", "band", "hujjat", "muvofiqlash",
-            "мувофиқ", "низом", "қоида", "талаб", "сиёсат",
-        )
-    ):
-        plan.add("AI Metodist")
-    return plan
 
 
 def _registry() -> dict[str, Agent]:
@@ -197,6 +156,7 @@ class Manager:
         deadlines: dict[str, float] | None = None,
         attachment_meta: dict | None = None,
         enrich: bool = False,
+        case_type: str = "general",
     ) -> dict:
         """Shared body for `chat` and `suggest`. Differs only in (a) which
         agents are in the plan, (b) which deadlines they get, and (c)
@@ -252,6 +212,7 @@ class Manager:
             "response": final.payload,
             "citations": [asdict(c) for c in final.citations],
             "case_analysis": case_obj.to_dict(),
+            "case_type": case_type,
             "attachment": attachment_meta,
             "ms_total": ms,
         }
@@ -270,13 +231,17 @@ class Manager:
         effective, meta = await self._resolve_query(
             query=query, attachment_id=attachment_id
         )
-        plan = _detect_intent(effective)
+        decision = await detect_intent(effective, allow_llm=True)
+        plan = set(decision.agents)
+        case_type = decision.case_type
         # Uploads almost always carry compliance / comparison intent —
         # an incoming circular needs to be checked against the KB. Make
         # Metodist part of the plan unconditionally so Case 1 lights up
         # the comparison flow even when the user's message is terse.
         if meta and not meta.get("missing"):
             plan.add("AI Metodist")
+            if case_type == "general":
+                case_type = "incoming_letter"
         return await self._run(
             query=effective,
             user_id=user_id,
@@ -285,6 +250,7 @@ class Manager:
             deadlines=None,
             attachment_meta=meta,
             enrich=True,
+            case_type=case_type,
         )
 
     async def suggest(
@@ -305,7 +271,10 @@ class Manager:
         effective, meta = await self._resolve_query(
             query=query, attachment_id=attachment_id
         )
-        plan = _detect_intent(effective) - {"AI Metodist"}
+        # Preview must stay sub-second: skip the LLM intent call (rules
+        # only) and drop the slow Metodist from the plan entirely.
+        decision = await detect_intent(effective, allow_llm=False)
+        plan = set(decision.agents) - {"AI Metodist"}
         return await self._run(
             query=effective,
             user_id=user_id,
@@ -313,6 +282,7 @@ class Manager:
             plan=plan,
             deadlines={"AI Searcher": 2.0, "AI Shadow": 2.0},
             attachment_meta=meta,
+            case_type=decision.case_type,
         )
 
 
