@@ -72,6 +72,14 @@ async def _seed_demo_notifications() -> None:
 async def lifespan(app: FastAPI):
     settings = get_settings()
     if not settings.aim_demo:
+        # Restore persisted auto-audit findings so the bell isn't empty
+        # after a restart.
+        try:
+            from app.notifications import load_from_db
+
+            await load_from_db()
+        except Exception:
+            pass
         await architect.boot()
         asyncio.create_task(_prewarm_metodist())
         regulyator.schedule()

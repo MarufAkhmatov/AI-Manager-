@@ -166,7 +166,9 @@ class Metodist:
 
     async def run(self, ctx: AgentContext) -> AgentResult:
         start = time.perf_counter()
-        mode = _pick_mode(ctx.query)
+        # A per-case workflow template may force the mode (incoming letters,
+        # audits, product checks are all comparisons); else auto-detect.
+        mode = ctx.scratch.get("metodist_mode") or _pick_mode(ctx.query)
         await emit(
             self.name,
             "standalone.call",

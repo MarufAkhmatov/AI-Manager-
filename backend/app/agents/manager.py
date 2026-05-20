@@ -31,6 +31,7 @@ from app.agents.extract import enrich_case_analysis
 from app.agents.intent import detect_intent
 from app.agents.searcher import searcher
 from app.agents.secure import secure
+from app.agents.workflows import template_for
 from app.attachments import store as attachment_store
 from app.config import get_settings
 from app.events import emit
@@ -157,6 +158,8 @@ class Manager:
         attachment_meta: dict | None = None,
         enrich: bool = False,
         case_type: str = "general",
+        metodist_mode: str | None = None,
+        directive: str = "",
     ) -> dict:
         """Shared body for `chat` and `suggest`. Differs only in (a) which
         agents are in the plan, (b) which deadlines they get, and (c)
@@ -164,6 +167,12 @@ class Manager:
         (only on the full `chat` path — the preview stays fast)."""
         task_id = uuid.uuid4()
         ctx = AgentContext(task_id=task_id, user_id=user_id, role=role, query=query)
+        # Per-case workflow hints consumed by Metodist (mode override) and
+        # the extraction pass (directive).
+        if metodist_mode:
+            ctx.scratch["metodist_mode"] = metodist_mode
+        if directive:
+            ctx.scratch["directive"] = directive
         start = time.perf_counter()
 
         await emit(
@@ -204,7 +213,11 @@ class Manager:
             # Phase 3: distill conflicts + recommendations via a cheap local
             # LLM pass (Ollama qwen2.5) or a deterministic demo stub. Only on
             # the full chat path — previews skip this to stay sub-second.
-            case_obj = await enrich_case_analysis(case_obj, query=query)
+            # The per-case directive steers the extraction toward the right
+            # output shape (letter diff vs product check vs audit).
+            case_obj = await enrich_case_analysis(
+                case_obj, query=query, directive=directive
+            )
 
         return {
             "task_id": str(task_id),
@@ -242,6 +255,11 @@ class Manager:
             plan.add("AI Metodist")
             if case_type == "general":
                 case_type = "incoming_letter"
+
+        # Apply the per-case workflow template: force its extra agents into
+        # the plan and pass its Metodist-mode + directive down to _run.
+        tmpl = template_for(case_type)
+        plan |= tmpl.extra_agents
         return await self._run(
             query=effective,
             user_id=user_id,
@@ -251,6 +269,8 @@ class Manager:
             attachment_meta=meta,
             enrich=True,
             case_type=case_type,
+            metodist_mode=tmpl.metodist_mode,
+            directive=tmpl.directive,
         )
 
     async def suggest(

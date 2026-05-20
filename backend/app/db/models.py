@@ -170,6 +170,30 @@ class Task(Base):
     __table_args__ = (Index("ix_tasks_status_kind", "status", "kind"),)
 
 
+class Notification(Base):
+    """Auto-audit findings surfaced in the TopHeader bell.
+
+    The in-memory store (`app.notifications`) is the hot path; this table
+    is the durable backing so findings survive a restart. `case_analysis`
+    holds the full structured CaseAnalysis JSON.
+    """
+
+    __tablename__ = "notifications"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    kind: Mapped[str] = mapped_column(Text, nullable=False, default="audit")
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    source_url: Mapped[str | None] = mapped_column(Text)
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    case_analysis: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (Index("ix_notifications_created", "created_at"),)
+
+
 # Re-exports for Alembic autogeneration
 __all__ = [
     "Base",
@@ -179,5 +203,6 @@ __all__ = [
     "ProcessedFile",
     "AgentLog",
     "Task",
+    "Notification",
     "EMBED_DIM",
 ]

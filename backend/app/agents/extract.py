@@ -58,8 +58,10 @@ def _clip(s: str | None, n: int = _SNIPPET_CHARS) -> str:
     return s[:n]
 
 
-def _build_prompt(case: CaseAnalysis, query: str) -> str:
+def _build_prompt(case: CaseAnalysis, query: str, directive: str = "") -> str:
     lines: list[str] = [f"QUESTION:\n{query.strip()[:1500]}", ""]
+    if directive:
+        lines += [f"TASK DIRECTIVE:\n{directive[:500]}", ""]
     if case.summary:
         lines += ["ANALYSIS SUMMARY:", case.summary[:1500], ""]
 
@@ -199,12 +201,15 @@ def _demo_extract(case: CaseAnalysis, query: str) -> tuple[list[Conflict], list[
     return conflicts, recs
 
 
-async def enrich_case_analysis(case: CaseAnalysis, *, query: str) -> CaseAnalysis:
+async def enrich_case_analysis(
+    case: CaseAnalysis, *, query: str, directive: str = ""
+) -> CaseAnalysis:
     """Fill `case.conflicts` + `case.recommendations` in place and return it.
 
     Skips the LLM call entirely when there's nothing to analyse (no
     internal docs and no external acts). Best-effort: any failure leaves
-    the lists empty.
+    the lists empty. `directive` is the per-case instruction (from the
+    workflow template) folded into the prompt to steer the output shape.
     """
     if case.conflicts or case.recommendations:
         return case  # already populated upstream
@@ -218,7 +223,7 @@ async def enrich_case_analysis(case: CaseAnalysis, *, query: str) -> CaseAnalysi
 
     import asyncio
 
-    prompt = _build_prompt(case, query)
+    prompt = _build_prompt(case, query, directive)
     try:
         raw = await asyncio.wait_for(
             get_ollama().generate(
