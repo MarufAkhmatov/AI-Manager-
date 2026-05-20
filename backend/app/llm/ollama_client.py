@@ -38,9 +38,14 @@ class OllamaClient:
         return data.get("response", "")
 
     async def embed(self, model: str, inputs: list[str]) -> list[list[float]]:
+        # truncate=True lets Ollama clip any input that overflows the model's
+        # context (bge-m3 is 8192 tokens) instead of failing the whole batch
+        # with HTTP 400 "input length exceeds the context length". Cyrillic /
+        # Uzbek legal text tokenises densely, so a long query or attachment
+        # prefix can exceed the window even after chunking.
         r = await self._client.post(
             "/api/embed",
-            json={"model": model, "input": inputs},
+            json={"model": model, "input": inputs, "truncate": True},
         )
         r.raise_for_status()
         data = r.json()
