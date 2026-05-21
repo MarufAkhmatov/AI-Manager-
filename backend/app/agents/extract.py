@@ -26,13 +26,14 @@ import re
 from app.agents.cases import CaseAnalysis, Conflict, Recommendation
 from app.config import get_settings
 from app.events import emit
-from app.llm.ollama_client import get_ollama
+from app.llm.llm import get_llm
 
 # Keep the extraction prompt's inputs bounded so a huge attachment doesn't
 # blow the local model's context window.
 _MAX_DOCS = 6
 _SNIPPET_CHARS = 400
-_LLM_TIMEOUT_S = 12.0
+# Generous enough for a Claude API round-trip on a larger extraction prompt.
+_LLM_TIMEOUT_S = 30.0
 
 _SYSTEM = (
     "You are a banking compliance analyst for an Uzbek bank. "
@@ -226,7 +227,7 @@ async def enrich_case_analysis(
     prompt = _build_prompt(case, query, directive)
     try:
         raw = await asyncio.wait_for(
-            get_ollama().generate(
+            get_llm().generate(
                 settings.ollama_model_router,
                 prompt,
                 system=_SYSTEM,

@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 
 from app.config import get_settings
 from app.events import emit
-from app.llm.ollama_client import get_ollama
+from app.llm.llm import get_llm
 
 # Agents the classifier is allowed to schedule on the query path.
 QUERY_AGENTS = {"AI Searcher", "AI Shadow", "AI Metodist"}
@@ -38,7 +38,9 @@ CASE_TYPES = {
     "normative_audit",  # which internal docs need updating
 }
 
-_LLM_TIMEOUT_S = 6.0
+# Generous enough for a Claude API round-trip (incl. a cache-cold first call);
+# the keyword rules still cover any timeout.
+_LLM_TIMEOUT_S = 20.0
 
 
 @dataclass(slots=True)
@@ -145,7 +147,7 @@ async def detect_intent(query: str, *, allow_llm: bool = True) -> IntentDecision
 
     try:
         raw = await asyncio.wait_for(
-            get_ollama().generate(
+            get_llm().generate(
                 settings.ollama_model_router,
                 f"QUERY:\n{query[:2000]}\n\nReturn the JSON now.",
                 system=_SYSTEM,

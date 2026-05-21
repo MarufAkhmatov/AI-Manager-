@@ -41,6 +41,15 @@ class Settings(BaseSettings):
     ollama_model_synth: str = "llama3.1:8b"
     ollama_model_embed: str = "bge-m3"
 
+    # Generative LLM backend for intent routing + conflict/recommendation
+    # extraction: "ollama" (local, default) or "anthropic" (Claude). On a
+    # CPU-only host the local 7B/8B models are too slow, so point these at
+    # Claude. Embeddings stay on local bge-m3 regardless.
+    aim_llm_backend: str = "ollama"
+    anthropic_api_key: str = ""
+    anthropic_model: str = "claude-sonnet-4-6"
+    anthropic_max_tokens: int = 1024
+
     api_host: str = "0.0.0.0"
     api_port: int = 8000
 

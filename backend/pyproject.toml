@@ -29,6 +29,7 @@ dependencies = [
     "langgraph>=0.2.50",
     "httpx>=0.27",
     "tiktoken>=0.8",
+    "anthropic>=0.40",  # Claude backend for intent + extraction (AIM_LLM_BACKEND=anthropic)
 
     # ingestion
     "watchdog>=5",
