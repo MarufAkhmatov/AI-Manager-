@@ -1,0 +1,129 @@
+name: ai-manager
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: aim-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ai_manager}
+      POSTGRES_USER: ${POSTGRES_USER:-ai_manager}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    volumes:
+      - aim-pg-data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ai_manager} -d ${POSTGRES_DB:-ai_manager}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: aim-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - aim-redis-data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: aim-ollama
+    restart: unless-stopped
+    environment:
+      # Keep models resident once loaded. A cold 7B load is ~60-70s on CPU,
+      # far past the agent deadlines (Searcher 2.2s, extract 12s), so without
+      # this the first query after every idle period silently falls back.
+      OLLAMA_KEEP_ALIVE: "-1"
+    volumes:
+      - aim-ollama-data:/root/.ollama
+    ports:
+      - "11434:11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  # One-shot: pulls the local models the platform needs, then exits. The API
+  # waits for this to finish so the first query has its models ready.
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: aim-ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        echo "pulling router model (${OLLAMA_MODEL_ROUTER:-qwen2.5:7b-instruct})…"
+        ollama pull ${OLLAMA_MODEL_ROUTER:-qwen2.5:7b-instruct}
+        echo "pulling synthesis model (${OLLAMA_MODEL_SYNTH:-llama3.1:8b})…"
+        ollama pull ${OLLAMA_MODEL_SYNTH:-llama3.1:8b}
+        echo "pulling embedding model (${OLLAMA_MODEL_EMBED:-bge-m3})…"
+        ollama pull ${OLLAMA_MODEL_EMBED:-bge-m3}
+        echo "ollama models ready."
+    restart: "no"
+
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: aim-api
+    restart: unless-stopped
+    env_file: ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
+    volumes:
+      # Mount the operator's runtime root. On Windows hosts set AIM_ROOT in
+      # .env to your KB path; in dev point it at a local directory.
+      - ${AIM_ROOT}:/data/aim-root
+    environment:
+      AIM_ROOT: /data/aim-root
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  web:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        # Browser-facing URLs — must be the published host ports, not the
+        # internal docker service names. Override via shell env if you serve
+        # the API on a different host/port.
+        NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-http://localhost:8000}
+        NEXT_PUBLIC_WS_BASE: ${NEXT_PUBLIC_WS_BASE:-ws://localhost:8000}
+    container_name: aim-web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+
+volumes:
+  aim-pg-data:
+  aim-redis-data:
+  aim-ollama-data:

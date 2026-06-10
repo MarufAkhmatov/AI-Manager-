@@ -1,0 +1,309 @@
+"""AI Manager — orchestrator.
+
+Flow per request:
+  1. Intent detection (rule-based; LLM fallback hook reserved).
+  2. Plan: select sub-agents based on intent.
+  3. Parallel dispatch with a **per-agent** soft deadline (see
+     `AGENT_DEADLINES_S`). Slow agents return partials, fast agents
+     are not penalised by a single global cap.
+  4. Aggregate into one AgentResult.
+  5. **Mandatory** pass through AI Secure (egress sanitizer).
+
+Latency budget
+- Pure AI Searcher queries finish well under 3 s (HNSW + Redis warm hit).
+- Queries that touch AI Metodist take up to ~15 s — the standalone
+  wraps a Claude API call plus hybrid retrieval. The BGE-M3 model is
+  pre-warmed at FastAPI boot (see `app/main.py::lifespan`) so the first
+  user-facing call doesn't eat the ~30 s cold-load on top.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import time
+import uuid
+from dataclasses import asdict
+from typing import Iterable
+
+from app.agents.base import Agent, AgentContext, AgentResult, Citation
+from app.agents.cases import build_case_analysis
+from app.agents.extract import enrich_case_analysis
+from app.agents.intent import detect_intent
+from app.agents.searcher import searcher
+from app.agents.secure import secure
+from app.agents.workflows import template_for
+from app.attachments import store as attachment_store
+from app.config import get_settings
+from app.events import emit
+
+# Cap the attachment text we splice into the query so we don't blow past
+# the agents' input budgets (bge-m3 tokenises ~8k input cleanly; tighter
+# than the upload-time cap of 200_000 chars). The first ~6k chars are
+# usually enough to capture an incoming circular's substance — the
+# Searcher will then surface KB docs that are semantically related to
+# that prefix, and Metodist sees both halves anyway via the chunk pull.
+_ATTACHMENT_QUERY_PREFIX_CHARS = 6000
+
+# Per-agent soft deadlines. Anything not listed gets `DEFAULT_DEADLINE_S`.
+# Numbers chosen for the typical workload, not the worst case — we want
+# slow agents to drop out of partials before they hold up the response.
+AGENT_DEADLINES_S: dict[str, float] = {
+    "AI Searcher": 2.2,
+    "AI Shadow": 2.5,
+    "AI Metodist": 15.0,  # Claude API + retrieval; model is pre-warmed at boot
+}
+DEFAULT_DEADLINE_S = 2.2
+
+
+def _registry() -> dict[str, Agent]:
+    # Demo / no-deps mode: skip the real agents (which need Postgres +
+    # Ollama + the standalone Metodist) and use the stubs instead. The
+    # Secure egress is still wired up in `_run` so contracts hold.
+    if get_settings().aim_demo:
+        from app.agents.demo_stubs import demo_registry
+
+        return demo_registry()
+
+    # Lazy import to keep the optional Phase 4 agents out of Phase 3 dep graph.
+    reg: dict[str, Agent] = {"AI Searcher": searcher}
+    try:
+        from app.agents.metodist import metodist
+
+        reg["AI Metodist"] = metodist
+    except Exception:
+        pass
+    try:
+        from app.agents.shadow import shadow
+
+        reg["AI Shadow"] = shadow
+    except Exception:
+        pass
+    return reg
+
+
+async def _run_with_deadline(agent: Agent, ctx: AgentContext) -> AgentResult | None:
+    deadline = AGENT_DEADLINES_S.get(agent.name, DEFAULT_DEADLINE_S)
+    try:
+        return await asyncio.wait_for(agent.run(ctx), timeout=deadline)
+    except asyncio.TimeoutError:
+        await emit(agent.name, "timeout", task_id=str(ctx.task_id))
+        return None
+    except Exception as e:
+        await emit(
+            agent.name, "error", task_id=str(ctx.task_id), error=f"{type(e).__name__}: {e}"
+        )
+        return None
+
+
+def _aggregate(name: str, parts: Iterable[AgentResult]) -> AgentResult:
+    citations: list[Citation] = []
+    payload: dict = {"agents": {}}
+    confidential = False
+    for p in parts:
+        payload["agents"][p.agent] = p.payload
+        citations.extend(p.citations)
+        if p.confidential_origin:
+            confidential = True
+    return AgentResult(
+        agent=name,
+        payload=payload,
+        citations=citations,
+        confidence=max((p.confidence for p in parts), default=0.0),
+        confidential_origin=confidential,
+    )
+
+
+class Manager:
+    name = "AI Manager"
+
+    async def _resolve_query(
+        self, *, query: str, attachment_id: str | None
+    ) -> tuple[str, dict | None]:
+        """Resolve the effective query and a small metadata blob for the
+        UI. If ``attachment_id`` is set, the attachment's extracted text
+        becomes the retrieval/comparison context — the operator's typed
+        message is appended as the explicit instruction."""
+        if not attachment_id:
+            return query, None
+        att = await attachment_store.get(attachment_id)
+        if att is None:
+            # Stale / expired upload — fall back to the user message alone
+            # so the request still succeeds; the chat panel surfaces the
+            # missing-attachment hint via the response.
+            return query, {"missing": True, "id": attachment_id}
+        body = att.text[:_ATTACHMENT_QUERY_PREFIX_CHARS].strip()
+        # Keep the user's instruction first so intent-detection keywords
+        # ("compare", "compliant", "internal", …) still fire against it.
+        effective = (
+            f"{query.strip()}\n\n"
+            f"--- Attachment: {att.filename} ({att.char_count} chars) ---\n"
+            f"{body}"
+        )
+        meta = {
+            "id": att.id,
+            "filename": att.filename,
+            "bytes_size": att.bytes_size,
+            "char_count": att.char_count,
+        }
+        return effective, meta
+
+    async def _run(
+        self,
+        *,
+        query: str,
+        user_id: uuid.UUID | None,
+        role: str,
+        plan: set[str],
+        deadlines: dict[str, float] | None = None,
+        attachment_meta: dict | None = None,
+        enrich: bool = False,
+        case_type: str = "general",
+        metodist_mode: str | None = None,
+        directive: str = "",
+    ) -> dict:
+        """Shared body for `chat` and `suggest`. Differs only in (a) which
+        agents are in the plan, (b) which deadlines they get, and (c)
+        whether the structured conflict/recommendation extraction runs
+        (only on the full `chat` path — the preview stays fast)."""
+        task_id = uuid.uuid4()
+        ctx = AgentContext(task_id=task_id, user_id=user_id, role=role, query=query)
+        # Per-case workflow hints consumed by Metodist (mode override) and
+        # the extraction pass (directive).
+        if metodist_mode:
+            ctx.scratch["metodist_mode"] = metodist_mode
+        if directive:
+            ctx.scratch["directive"] = directive
+        start = time.perf_counter()
+
+        await emit(
+            self.name, "plan", task_id=str(task_id), agents=sorted(plan), query=query[:200]
+        )
+
+        reg = _registry()
+        runnable = [reg[a] for a in plan if a in reg]
+        if deadlines is None:
+            results = await asyncio.gather(*[_run_with_deadline(a, ctx) for a in runnable])
+        else:
+            results = await asyncio.gather(
+                *[
+                    asyncio.wait_for(a.run(ctx), timeout=deadlines.get(a.name, 2.0))
+                    if a.name in deadlines
+                    else _run_with_deadline(a, ctx)
+                    for a in runnable
+                ],
+                return_exceptions=True,
+            )
+            # Coerce timeouts/errors to None so the downstream aggregate ignores them.
+            results = [r if hasattr(r, "agent") else None for r in results]
+
+        parts = [r for r in results if r is not None]
+
+        aggregate = _aggregate(self.name, parts)
+        ctx.scratch["aggregate"] = aggregate
+
+        final = await secure.run(ctx)
+        ms = int((time.perf_counter() - start) * 1000)
+        await emit(self.name, "done", task_id=str(task_id), ms_total=ms)
+
+        # Structured case analysis — the Recommendation panel's preferred
+        # render path. Built from the masked aggregate so confidential ids
+        # / titles are already stripped before they hit the schema.
+        case_obj = build_case_analysis(final)
+        if enrich:
+            # Phase 3: distill conflicts + recommendations via a cheap local
+            # LLM pass (Ollama qwen2.5) or a deterministic demo stub. Only on
+            # the full chat path — previews skip this to stay sub-second.
+            # The per-case directive steers the extraction toward the right
+            # output shape (letter diff vs product check vs audit).
+            case_obj = await enrich_case_analysis(
+                case_obj, query=query, directive=directive
+            )
+
+        return {
+            "task_id": str(task_id),
+            "agents_used": [p.agent for p in parts] + [secure.name],
+            "response": final.payload,
+            "citations": [asdict(c) for c in final.citations],
+            "case_analysis": case_obj.to_dict(),
+            "case_type": case_type,
+            "attachment": attachment_meta,
+            "ms_total": ms,
+        }
+
+    async def chat(
+        self,
+        *,
+        query: str,
+        user_id: uuid.UUID | None,
+        role: str,
+        attachment_id: str | None = None,
+    ) -> dict:
+        """Full DAG — Searcher / Shadow / Metodist as the intent dictates.
+        If ``attachment_id`` is set, the upload's OCR'd text is folded
+        into the retrieval/comparison context (Case 1 flow)."""
+        effective, meta = await self._resolve_query(
+            query=query, attachment_id=attachment_id
+        )
+        decision = await detect_intent(effective, allow_llm=True)
+        plan = set(decision.agents)
+        case_type = decision.case_type
+        # Uploads almost always carry compliance / comparison intent —
+        # an incoming circular needs to be checked against the KB. Make
+        # Metodist part of the plan unconditionally so Case 1 lights up
+        # the comparison flow even when the user's message is terse.
+        if meta and not meta.get("missing"):
+            plan.add("AI Metodist")
+            if case_type == "general":
+                case_type = "incoming_letter"
+
+        # Apply the per-case workflow template: force its extra agents into
+        # the plan and pass its Metodist-mode + directive down to _run.
+        tmpl = template_for(case_type)
+        plan |= tmpl.extra_agents
+        return await self._run(
+            query=effective,
+            user_id=user_id,
+            role=role,
+            plan=plan,
+            deadlines=None,
+            attachment_meta=meta,
+            enrich=True,
+            case_type=case_type,
+            metodist_mode=tmpl.metodist_mode,
+            directive=tmpl.directive,
+        )
+
+    async def suggest(
+        self,
+        *,
+        query: str,
+        user_id: uuid.UUID | None,
+        role: str,
+        attachment_id: str | None = None,
+    ) -> dict:
+        """Live preview Manager. Strips the slow Metodist (which can take
+        ~15 s on a cold Claude call) and tightens every remaining agent's
+        deadline to 2 s — Searcher's cached hits beat that comfortably.
+
+        Designed for the typing-as-you-go Recommendation preview: it
+        gives the operator a feel for what AI Manager would say without
+        burning Anthropic tokens on every keystroke."""
+        effective, meta = await self._resolve_query(
+            query=query, attachment_id=attachment_id
+        )
+        # Preview must stay sub-second: skip the LLM intent call (rules
+        # only) and drop the slow Metodist from the plan entirely.
+        decision = await detect_intent(effective, allow_llm=False)
+        plan = set(decision.agents) - {"AI Metodist"}
+        return await self._run(
+            query=effective,
+            user_id=user_id,
+            role=role,
+            plan=plan,
+            deadlines={"AI Searcher": 2.0, "AI Shadow": 2.0},
+            attachment_meta=meta,
+            case_type=decision.case_type,
+        )
+
+
+manager = Manager()

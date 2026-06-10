@@ -1,0 +1,128 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ────────────────────────────────────────────────────────────────────
+   AI Manager — palette ported from the Metodistai + AI-Workflow Figma
+   exports: near-black canvas, neon-green primary, amber secondary.
+   ──────────────────────────────────────────────────────────────────── */
+:root,
+.dark {
+  --bg: #030303;
+  --bg-2: #050505;
+  --text: #ffffff;
+  --text-dim: rgba(255, 255, 255, 0.6);
+  --text-faint: rgba(255, 255, 255, 0.4);
+  --surface: rgba(255, 255, 255, 0.04);
+  --surface-2: rgba(255, 255, 255, 0.06);
+  --line: rgba(255, 255, 255, 0.10);
+  --line-2: rgba(255, 255, 255, 0.06);
+
+  --neon: #22ff88;
+  --neon-soft: rgba(34, 255, 136, 0.10);
+  --neon-dim: rgba(34, 255, 136, 0.5);
+  --amber: #ffcc00;
+  --amber-soft: rgba(255, 204, 0, 0.10);
+  --danger: #ff4f5e;
+
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100%;
+}
+
+body {
+  font-family: "Inter", ui-sans-serif, system-ui, Helvetica, sans-serif;
+  selection-color: black;
+}
+::selection {
+  background: rgba(34, 255, 136, 0.3);
+  color: #000;
+}
+
+/* ────────────────────────── Workflow canvas surfaces ──────────────── */
+
+/* Dotted grid + ambient noise mimicking the AI-Workflow editor. */
+.canvas-bg {
+  background-color: var(--bg);
+  position: relative;
+}
+.canvas-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    rgba(255, 255, 255, 0.15) 1px,
+    transparent 0
+  );
+  background-size: 40px 40px;
+  opacity: 0.2;
+  pointer-events: none;
+}
+.canvas-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.6'/></svg>");
+  opacity: 0.05;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+}
+
+/* Single top-centred emerald glow for the header backdrop. */
+.ambient-glow::before {
+  content: "";
+  position: absolute;
+  top: -80px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(800px, 70%);
+  height: 500px;
+  background: rgba(34, 255, 136, 0.06);
+  filter: blur(150px);
+  border-radius: 9999px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ────────────────────────── Reusable surfaces ─────────────────────── */
+
+.pill {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 9999px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.glass-card {
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+
+/* Inner sunken surface used by the per-agent log list. */
+.neo-in {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.10);
+  border-radius: 999px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.20);
+}
